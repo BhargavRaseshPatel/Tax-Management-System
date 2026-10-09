@@ -121,6 +121,8 @@ class BillingWorkflowIntegrationTest {
 
 		assertThat(bill(f.accountId(), "INTERIM")).hasStatus(CONFLICT);
 		assertThat(bill(f.accountId(), "FINAL")).hasStatus(CONFLICT);
+		assertThat(mvc.get().uri("/api/tax-accounts/" + f.accountId() + "/bills"))
+				.bodyJson().extractingPath("$.length()").isEqualTo(2);
 		assertThat(mvc.get().uri("/api/tax-accounts/" + f.accountId() + "/balance")).hasStatus(OK)
 				.bodyJson().satisfies(json -> {
 					assertThat(json).extractingPath("$.totalBilled").isEqualTo(4875.00);
@@ -169,6 +171,8 @@ class BillingWorkflowIntegrationTest {
 				.bodyJson().extractingPath("$.outstanding").isEqualTo(0.00);
 
 		long firstId = id(first);
+		assertThat(mvc.get().uri("/api/payments/" + firstId)).hasStatusOk()
+				.bodyJson().extractingPath("$.referenceNumber").isEqualTo(firstRef);
 		assertThat(post("/api/payments/" + firstId + "/reverse", "")).hasStatus(OK)
 				.bodyJson().extractingPath("$.status").isEqualTo("REVERSED");
 		assertThat(post("/api/payments/" + firstId + "/reverse", "")).hasStatus(CONFLICT);

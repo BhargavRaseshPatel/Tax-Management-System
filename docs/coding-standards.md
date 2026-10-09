@@ -13,5 +13,9 @@
 - Errors via one `@RestControllerAdvice` returning RFC 9457 `ProblemDetail`.
 - Business logic lives in services, not controllers or the frontend.
 - Every business rule (tax calc, balance, status transitions) has a test.
+- Tests: pure logic → plain JUnit; service rules → Mockito (assert rejections never `save`); anything touching SQL,
+  locks or transactions → Testcontainers PostgreSQL (never H2). Integration tests use unique fictional data instead of
+  cleanup, because test classes share a container. A new safety mechanism (lock, constraint, transaction) needs a
+  test that fails when it is removed.
 - Config via `application.yml` + env vars; no secrets in the repo.
 - Commits: small, one concern each, imperative message.

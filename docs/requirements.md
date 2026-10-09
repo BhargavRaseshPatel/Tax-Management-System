@@ -33,5 +33,6 @@ final = annual − interim; overpayments rejected (decided in Stage 5).
 | 2 PostgreSQL + Flyway schema | Done |
 | 3 JPA entities + repositories | Done |
 | 4 REST APIs | Done |
-| 5 Business logic | Done — awaiting approval. Rules in [business-flow.md](business-flow.md) |
-| 6–19 | Not started |
+| 5 Business logic | Done. Rules in [business-flow.md](business-flow.md) |
+| 6 Backend testing | Done — awaiting approval. Authorization tests deferred to Stage 8 (no auth exists yet) |
+| 7–19 | Not started |
