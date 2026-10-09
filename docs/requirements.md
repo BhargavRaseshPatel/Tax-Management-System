@@ -28,5 +28,6 @@ Formula: `Assessed Value × Applicable Tax Rate = Tax Amount` (rounded to cents,
 ## Stage status
 | Stage | Status |
 |---|---|
-| 1 Foundation | Done — awaiting approval |
-| 2–19 | Not started |
+| 1 Foundation | Done |
+| 2 PostgreSQL + Flyway schema | Done — awaiting approval |
+| 3–19 | Not started |
