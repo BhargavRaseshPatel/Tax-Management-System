@@ -7,15 +7,26 @@ Payments are simulated records only; no money moves.
 ## Prerequisites
 Java 21+ and Docker (running). Maven is not needed — use the wrapper `./mvnw`.
 
-## Run the backend
+## Run everything with Docker (one command)
+```bash
+cp .env.example .env              # then set DB_PASSWORD
+docker compose up -d --build --wait      # PostgreSQL + backend + frontend → http://localhost:8088
+API=http://localhost:8088 scripts/seed-demo-data.sh   # first run only: fictional demo data
+```
+The web container (nginx) serves the React build and proxies `/api` to the backend, which is not published to the
+host. Logs: `docker compose logs -f backend`. Stop: `docker compose stop`. Delete everything incl. data:
+`docker compose down -v`. Rebuild after code changes: `docker compose up -d --build --wait`.
+
+## Run the backend (development)
 ```bash
 cp .env.example .env              # then set DB_PASSWORD (DEV_AUTH=true enables local sign-in)
-docker compose up -d --wait       # PostgreSQL 17 on localhost:5433
+docker compose up -d --wait postgres   # database only, on localhost:5433
 cd backend && ./mvnw spring-boot:run   # reads ../.env itself; no exports needed
 ```
 - Health: `curl localhost:8080/actuator/health` → `{"status":"UP"}` (Flyway migrates on startup)
 - API docs: http://localhost:8080/swagger-ui.html — reference in [docs/api.md](docs/api.md), rules in [docs/business-flow.md](docs/business-flow.md)
 - Stop: `Ctrl+C`, then `docker compose stop` (data kept) or `docker compose down -v` (data deleted)
+- The Docker stack and the dev servers can run side by side (8088 vs 8080/5173) and share the same database.
 
 ## Run the frontend
 Requires Node 22+. With the backend running on port 8080:
@@ -24,7 +35,7 @@ cd frontend && npm install && npm run dev      # http://localhost:5173 (proxies 
 ```
 Load fictional demo data once, into a **fresh** database (it goes through the API, so all business rules apply):
 ```bash
-docker compose down -v && docker compose up -d --wait   # reset local DB, then (re)start the backend
+docker compose down -v && docker compose up -d --wait postgres   # reset local DB, then (re)start the backend
 scripts/seed-demo-data.sh                               # needs curl + jq; signs in via the dev issuer
 ```
 Sign in as **Elena Rostova** (resident), **Marcus Vance** (tax officer) or **Sarah Chen** (admin), or switch with

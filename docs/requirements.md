@@ -36,5 +36,6 @@ final = annual − interim; overpayments rejected (decided in Stage 5).
 | 5 Business logic | Done. Rules in [business-flow.md](business-flow.md) |
 | 6 Backend testing | Done. Authorization tests deferred to Stage 8 |
 | 7 React frontend | Done |
-| 8 Auth & RBAC | Done — awaiting approval. Local dev JWT issuer stands in for Cognito (no AWS account yet) |
-| 9–19 | Not started |
+| 8 Auth & RBAC | Done. Local dev JWT issuer stands in for Cognito (no AWS account yet) |
+| 9 Docker & local env | Done — awaiting approval |
+| 10–19 | Not started |

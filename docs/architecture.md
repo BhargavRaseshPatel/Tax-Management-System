@@ -5,7 +5,8 @@
 /backend    Spring Boot 4.1 API (Java 21, Maven wrapper)
 /frontend   React + TS + Vite + MUI          (Stage 7)
 /docs       Steering files and documentation
-compose.yaml  Local PostgreSQL 17 on 127.0.0.1:5433 (5432 is left to any host-installed Postgres)
+compose.yaml  Local stack: postgres (127.0.0.1:5433) → backend (internal only) → web/nginx (127.0.0.1:8088)
+/scripts   seed-demo-data.sh (fictional data through the API)
 ```
 
 ## Backend
@@ -45,6 +46,15 @@ src/pages/      resident/ · officer/ · admin/   one file per screen
 - One cache key per URL; any successful write refetches all queries (simple and always consistent for a demo).
 - Route guards only steer navigation — they are not security. The backend enforces roles from Stage 8.
 - Static mock data only where no backend exists yet (Reports job tracker), always labelled "Mock data".
+
+## Containers (Stage 9)
+| Image | Base | Notes |
+|---|---|---|
+| backend | `eclipse-temurin:21-jre` (multi-stage from `-jdk`) | non-root `app`; `HEALTHCHECK` on `/actuator/health`; `MaxRAMPercentage=75` |
+| web | `nginxinc/nginx-unprivileged:1.29-alpine` (multi-stage from `node:22-alpine`) | non-root; SPA fallback; proxies `/api`; CSP + security headers; 1-year cache on hashed assets |
+
+Start order is enforced by health checks: postgres → backend → web. The same images run on ECS/Fargate later
+(Stage 14), with Cognito instead of `DEV_AUTH` and Aurora instead of the postgres container.
 
 ## Dependency introduction plan
 | Stage | Adds |

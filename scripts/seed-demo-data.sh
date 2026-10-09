@@ -2,10 +2,10 @@
 # Loads FICTIONAL demo data through the public REST API (so every business rule applies).
 # Names, addresses, roll numbers and tax rates are invented; rates are not official municipal rates.
 #
-# Usage:  scripts/seed-demo-data.sh                 # API at http://localhost:8080
-#         API=http://localhost:8081 scripts/seed-demo-data.sh
+# Usage:  scripts/seed-demo-data.sh                           # dev backend at http://localhost:8080
+#         API=http://localhost:8088 scripts/seed-demo-data.sh   # full Docker stack
 # Needs:  curl, jq, the backend running with DEV_AUTH=true (local sign-in), and an EMPTY database
-#         (reset with: docker compose down -v && docker compose up -d --wait, then restart the backend).
+#         (reset with: docker compose down -v, then start the database/stack and backend again).
 set -euo pipefail
 
 API="${API:-http://localhost:8080}"
@@ -27,7 +27,7 @@ sign_in() { TOKEN=$(call POST /api/dev/token "{\"email\":\"$1\"}" | jq -r .acces
 existing=$(call GET /api/dev/users | jq length) || { echo "Is the backend running with DEV_AUTH=true?"; exit 1; }
 if [[ "$existing" != "1" && "${FORCE:-0}" != "1" ]]; then
   echo "Database already has $existing user(s). This script expects a fresh database (only the bootstrap admin):"
-  echo "  docker compose down -v && docker compose up -d --wait   (then restart the backend)"
+  echo "  docker compose down -v, then start it again (and restart the dev backend if you use one)"
   exit 1
 fi
 
@@ -100,4 +100,4 @@ for acct in "$A1" "$A2" "$A3" "$A4"; do
   esac
 done
 
-echo "✓ Demo data loaded. Sign in at http://localhost:5173 as Elena Rostova (resident), Marcus Vance (officer), or Sarah Chen (admin)."
+echo "✓ Demo data loaded. Sign in (http://localhost:5173 dev, http://localhost:8088 Docker) as Elena Rostova, Marcus Vance, or Sarah Chen."
