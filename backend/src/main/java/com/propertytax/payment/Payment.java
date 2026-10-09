@@ -54,6 +54,10 @@ public class Payment extends BaseEntity {
 		this.recordedBy = recordedBy;
 	}
 
+	public void reverse() {
+		status = Status.REVERSED;
+	}
+
 	public TaxBill getTaxBill() { return taxBill; }
 	public BigDecimal getAmount() { return amount; }
 	public LocalDate getPaymentDate() { return paymentDate; }

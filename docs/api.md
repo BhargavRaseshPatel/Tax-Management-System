@@ -16,7 +16,7 @@ All data is fictional. No authentication yet (Stage 8 adds Cognito JWT + role ch
 | 400 | Validation, malformed JSON, bad enum, bad id type, unknown sort field, business-rule input error | `errors: {field: message}` for validation |
 | 404 | Unknown id | |
 | 405 | Unsupported method | |
-| 409 | Unique/foreign-key conflict, ownership > 100% | `constraint` (DB constraint name) |
+| 409 | Unique/foreign-key conflict, ownership > 100%, billing/payment rule violated | `constraint` (DB constraint name, when from the DB) |
 
 ## Endpoints
 | # | Method & path | Notes |
@@ -29,5 +29,6 @@ All data is fictional. No authentication yet (Stage 8 adds Cognito JWT + role ch
 | 3 | `POST/GET /api/properties/{id}/assessments`, `GET/PUT /api/assessments/{id}` | one per property per year |
 | 4 | `POST/GET /api/tax-rates?taxYear=`, `GET/PUT /api/tax-rates/{id}` | rate is a fraction (0.0075 = 0.75%); year/class immutable |
 | 5 | `POST/GET /api/tax-accounts`, `GET /api/tax-accounts/{id}`, `GET /api/properties/{id}/tax-account` | one per property; number `TA-<propertyId>` |
-| 6 | `GET /api/tax-accounts/{id}/bills`, `GET /api/tax-bills/{id}` | read-only until Stage 5 (generation) |
-| 7 | `GET /api/tax-bills/{id}/payments`, `GET /api/payments/{id}` | read-only until Stage 5 (recording) |
+| 6 | `POST/GET /api/tax-accounts/{id}/bills`, `GET /api/tax-bills/{id}`, `POST /api/tax-bills/{id}/cancel` | amount calculated server-side; see [business-flow.md](business-flow.md) |
+| 6 | `GET /api/tax-accounts/{id}/balance` | live bills − recorded payments |
+| 7 | `POST/GET /api/tax-bills/{id}/payments`, `GET /api/payments/{id}`, `POST /api/payments/{id}/reverse` | simulated; ≤ outstanding; unique reference |

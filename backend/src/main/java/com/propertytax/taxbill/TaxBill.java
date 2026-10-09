@@ -68,6 +68,21 @@ public class TaxBill extends BaseEntity {
 		this.dueDate = dueDate;
 	}
 
+	/** Status follows the total of RECORDED payments. A zero-amount bill is immediately PAID. */
+	public void applyPaidTotal(BigDecimal paid) {
+		if (paid.compareTo(amount) >= 0) {
+			status = Status.PAID;
+		} else if (paid.signum() > 0) {
+			status = Status.PARTIALLY_PAID;
+		} else {
+			status = Status.ISSUED;
+		}
+	}
+
+	public void cancel() {
+		status = Status.CANCELLED;
+	}
+
 	public String getBillNumber() { return billNumber; }
 	public TaxAccount getTaxAccount() { return taxAccount; }
 	public Assessment getAssessment() { return assessment; }

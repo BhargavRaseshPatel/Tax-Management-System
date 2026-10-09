@@ -2,6 +2,9 @@ package com.propertytax.taxrate;
 
 import java.util.List;
 
+import com.propertytax.common.ApiErrors;
+import com.propertytax.taxbill.TaxBill;
+import com.propertytax.taxbill.TaxBillRepository;
 import com.propertytax.taxrate.TaxRateDtos.TaxRateRequest;
 import com.propertytax.taxrate.TaxRateDtos.TaxRateResponse;
 import com.propertytax.taxrate.TaxRateDtos.TaxRateUpdateRequest;
@@ -13,9 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class TaxRateService {
 
 	private final TaxRateRepository taxRates;
+	private final TaxBillRepository taxBills;
 
-	TaxRateService(TaxRateRepository taxRates) {
+	TaxRateService(TaxRateRepository taxRates, TaxBillRepository taxBills) {
 		this.taxRates = taxRates;
+		this.taxBills = taxBills;
 	}
 
 	public TaxRateResponse create(TaxRateRequest r) {
@@ -35,8 +40,12 @@ public class TaxRateService {
 		return TaxRateResponse.from(taxRates.require(id));
 	}
 
+	/** A rate that priced a live bill is frozen; cancel the bill first to correct it. */
 	public TaxRateResponse update(Long id, TaxRateUpdateRequest r) {
 		var rate = taxRates.require(id);
+		if (taxBills.existsByTaxRateIdAndStatusNot(id, TaxBill.Status.CANCELLED)) {
+			throw ApiErrors.conflict("Tax rate " + id + " is used by a live tax bill and can't be changed");
+		}
 		rate.update(r.rate(), r.description());
 		taxRates.flush();
 		return TaxRateResponse.from(rate);

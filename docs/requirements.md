@@ -7,7 +7,8 @@ All tax data is fictional. Sample rates are **not** official City of Mississauga
 ## Workflow
 User → Owner → Property → Assessment → Tax Account → Tax Rate → Tax Calculation → Tax Bill → Payment → Outstanding Balance
 
-Formula: `Assessed Value × Applicable Tax Rate = Tax Amount` (rounded to cents, HALF_UP — confirm in Stage 5).
+Formula: `Assessed Value × Applicable Tax Rate = Tax Amount`, rounded to cents half-up. Interim = 50% of prior-year tax;
+final = annual − interim; overpayments rejected (decided in Stage 5).
 
 ## Roles
 | Role | Can do |
@@ -31,5 +32,6 @@ Formula: `Assessed Value × Applicable Tax Rate = Tax Amount` (rounded to cents,
 | 1 Foundation | Done |
 | 2 PostgreSQL + Flyway schema | Done |
 | 3 JPA entities + repositories | Done |
-| 4 REST APIs | Done — awaiting approval. Bills/payments are read-only; their create endpoints come with Stage 5 logic |
-| 5–19 | Not started |
+| 4 REST APIs | Done |
+| 5 Business logic | Done — awaiting approval. Rules in [business-flow.md](business-flow.md) |
+| 6–19 | Not started |
