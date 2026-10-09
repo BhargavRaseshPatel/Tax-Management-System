@@ -28,12 +28,12 @@ export function ResidentPropertiesPage() {
       <PageHeader
         eyebrow="Resident services"
         title="My property portfolio"
-        subtitle={ledger.owner
-          ? <>Properties registered to owner record <Mono>#{ledger.owner.id}</Mono>, with assessments, tax bills, and balances.</>
+        subtitle={ledger.ownerId
+          ? <>Properties registered to owner record <Mono>#{ledger.ownerId}</Mono>, with assessments, tax bills, and balances.</>
           : 'Your registered properties, assessments, tax bills, and balances.'}
       />
 
-      {ledger.ownerResolved && !ledger.owner ? (
+      {ledger.ownerResolved && !ledger.ownerId ? (
         <Alert severity="info">This resident login isn&apos;t linked to an owner record yet. A tax officer can link it from the Owners page.</Alert>
       ) : (
         <QueryState query={{ isPending: ledger.isPending, error: ledger.error }}>

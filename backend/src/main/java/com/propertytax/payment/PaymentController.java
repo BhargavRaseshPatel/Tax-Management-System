@@ -4,10 +4,12 @@ import java.util.List;
 
 import com.propertytax.payment.PaymentDtos.PaymentResponse;
 import com.propertytax.payment.PaymentDtos.RecordPaymentRequest;
+import com.propertytax.security.SecurityConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,8 +30,9 @@ class PaymentController {
 	@Operation(summary = "Record a simulated payment (≤ outstanding, unique reference)")
 	@PostMapping("/api/tax-bills/{taxBillId}/payments")
 	@ResponseStatus(HttpStatus.CREATED)
-	PaymentResponse record(@PathVariable Long taxBillId, @Valid @RequestBody RecordPaymentRequest request) {
-		return service.record(taxBillId, request);
+	PaymentResponse record(@PathVariable Long taxBillId, @Valid @RequestBody RecordPaymentRequest request,
+			Authentication auth) {
+		return service.record(taxBillId, request, SecurityConfig.userId(auth));
 	}
 
 	@GetMapping("/api/tax-bills/{taxBillId}/payments")

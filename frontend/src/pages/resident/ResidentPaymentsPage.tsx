@@ -29,7 +29,7 @@ export function ResidentPaymentsPage() {
         title="Payment history"
         subtitle="Payments recorded against your tax bills. Records are simulated for this demo: no bank accounts or payment gateways are involved."
       />
-      {ledger.ownerResolved && !ledger.owner ? (
+      {ledger.ownerResolved && !ledger.ownerId ? (
         <Alert severity="info">This resident login isn&apos;t linked to an owner record yet.</Alert>
       ) : (
         <QueryState query={{ isPending: ledger.isPending, error: ledger.error }}>

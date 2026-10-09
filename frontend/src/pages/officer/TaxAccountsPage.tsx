@@ -10,7 +10,6 @@ import UndoIcon from '@mui/icons-material/Undo'
 import { useApi, useApiMutation } from '../../api/client'
 import type { AccountBalance, BillType, Page, Payment, PaymentMethod, Property, TaxAccount, TaxBill } from '../../api/types'
 import { PAYMENT_METHODS } from '../../api/types'
-import { useSession } from '../../auth/session'
 import { CURRENT_YEAR, date, enumLabel, money, today } from '../../components/format'
 import { EmptyState, ErrorAlert, Mono, PageHeader, QueryState, SectionCard, StatusChip } from '../../components/ui'
 import { tokens } from '../../theme'
@@ -213,14 +212,13 @@ function BillRow({ bill }: { bill: TaxBill }) {
 }
 
 function RecordPayment({ bill }: { bill: TaxBill }) {
-  const { user } = useSession()
   const [form, setForm] = useState({ amount: String(bill.outstandingAmount), paymentDate: today(), method: 'BANK_TRANSFER' as PaymentMethod, referenceNumber: '' })
   const record = useApiMutation()
   return (
     <Box component="form" sx={{ p: 1.5, borderRadius: 2, bgcolor: tokens.panel }}
       onSubmit={(e) => {
         e.preventDefault()
-        record.mutate({ path: `/api/tax-bills/${bill.id}/payments`, body: { ...form, recordedByUserId: user?.id } },
+        record.mutate({ path: `/api/tax-bills/${bill.id}/payments`, body: form },
           { onSuccess: () => setForm({ ...form, referenceNumber: '' }) })
       }}>
       <Typography variant="overline" sx={{ color: 'text.secondary' }}>Record simulated payment</Typography>

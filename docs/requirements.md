@@ -35,5 +35,6 @@ final = annual − interim; overpayments rejected (decided in Stage 5).
 | 4 REST APIs | Done |
 | 5 Business logic | Done. Rules in [business-flow.md](business-flow.md) |
 | 6 Backend testing | Done. Authorization tests deferred to Stage 8 |
-| 7 React frontend | Done — awaiting approval. Uses live APIs; static mock data only for report jobs (Stages 11–13) |
-| 8–19 | Not started |
+| 7 React frontend | Done |
+| 8 Auth & RBAC | Done — awaiting approval. Local dev JWT issuer stands in for Cognito (no AWS account yet) |
+| 9–19 | Not started |

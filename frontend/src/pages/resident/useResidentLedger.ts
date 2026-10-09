@@ -1,7 +1,6 @@
 import { useQueries } from '@tanstack/react-query'
 import { apiQuery, useApi } from '../../api/client'
-import type { AccountBalance, Assessment, Owner, Ownership, Page, Payment, Property, TaxAccount, TaxBill } from '../../api/types'
-import { useSession } from '../../auth/session'
+import type { AccountBalance, Assessment, Me, Ownership, Payment, Property, TaxAccount, TaxBill } from '../../api/types'
 
 export interface ResidentProperty {
   property: Property
@@ -23,11 +22,9 @@ export interface ResidentPayment {
  * Shared by both resident pages; TanStack Query caches each URL so nothing is fetched twice.
  */
 export function useResidentLedger(options: { withPayments?: boolean } = {}) {
-  const { user } = useSession()
-  const owners = useApi<Page<Owner>>('/api/owners?size=100&sort=id')
-  // ponytail: owner looked up client-side by userId; Stage 8 adds GET /api/me so the server decides this
-  const owner = owners.data?.content.find((o) => o.userId === user?.id) ?? null
-  const propertiesQuery = useApi<Property[]>(owner ? `/api/owners/${owner.id}/properties` : null)
+  const me = useApi<Me>('/api/me')
+  const ownerId = me.data?.ownerId ?? null
+  const propertiesQuery = useApi<Property[]>(ownerId ? `/api/owners/${ownerId}/properties` : null)
   const properties = propertiesQuery.data ?? []
 
   const perProperty = (path: (p: Property) => string, allow404 = false) =>
@@ -46,7 +43,7 @@ export function useResidentLedger(options: { withPayments?: boolean } = {}) {
 
   const rows: ResidentProperty[] = properties.map((property, i) => ({
     property,
-    share: (shares[i]?.data as Ownership[] | undefined)?.find((s) => s.ownerId === owner?.id)?.ownershipPercent ?? null,
+    share: (shares[i]?.data as Ownership[] | undefined)?.find((s) => s.ownerId === ownerId)?.ownershipPercent ?? null,
     assessments: (assessments[i]?.data as Assessment[] | undefined) ?? [],
     account: accountList[i] ?? null,
     balance: forAccount(balances, accountList[i]) ?? null,
@@ -60,13 +57,13 @@ export function useResidentLedger(options: { withPayments?: boolean } = {}) {
   const payments: ResidentPayment[] = paymentQueries.flatMap((q, i) =>
     (q.data ?? []).map((payment) => ({ payment, ...allBills[i]! })))
 
-  const all = [owners, propertiesQuery, ...shares, ...assessments, ...accounts, ...balances, ...bills, ...paymentQueries]
+  const all = [me, propertiesQuery, ...shares, ...assessments, ...accounts, ...balances, ...bills, ...paymentQueries]
   return {
-    owner,
-    ownerResolved: owners.isSuccess,
+    ownerId,
+    ownerResolved: me.isSuccess,
     rows,
     payments,
-    isPending: owners.isPending || (owner !== null && propertiesQuery.isPending) || all.some((q) => q.isLoading),
+    isPending: me.isPending || (ownerId !== null && propertiesQuery.isPending) || all.some((q) => q.isLoading),
     error: all.find((q) => q.error)?.error ?? null,
   }
 }

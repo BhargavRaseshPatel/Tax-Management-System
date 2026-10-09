@@ -52,7 +52,7 @@ src/pages/      resident/ · officer/ · admin/   one file per screen
 | 1 | web, validation, actuator |
 | 2 | data-jpa, postgresql driver, flyway, testcontainers (tests need a real Postgres from day one) |
 | 4 | springdoc-openapi |
-| 8 | oauth2-resource-server (Cognito JWT) |
+| 8 | security-oauth2-resource-server (JWT; local dev issuer now, Cognito issuer URI when deployed) |
 | 11–13 | AWS SDK v2 (S3, DynamoDB, Step Functions) |
 
 ## Target AWS shape (Stages 10–17)

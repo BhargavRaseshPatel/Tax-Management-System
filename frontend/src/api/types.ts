@@ -112,6 +112,18 @@ export interface Payment extends Audited {
   recordedById: number
 }
 
+/** Who is signed in (from /api/dev/token locally; /api/me works with any token). */
+export interface SessionUser {
+  id: number
+  email: string
+  fullName: string
+  role: Role
+}
+
+export interface Me extends SessionUser {
+  ownerId: number | null
+}
+
 /** RFC 9457 ProblemDetail returned for every error. */
 export interface Problem {
   title?: string

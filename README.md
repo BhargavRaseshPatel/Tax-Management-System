@@ -9,10 +9,9 @@ Java 21+ and Docker (running). Maven is not needed — use the wrapper `./mvnw`.
 
 ## Run the backend
 ```bash
-cp .env.example .env              # then set DB_PASSWORD
+cp .env.example .env              # then set DB_PASSWORD (DEV_AUTH=true enables local sign-in)
 docker compose up -d --wait       # PostgreSQL 17 on localhost:5433
-set -a; . ./.env; set +a          # export DB_* for Spring
-cd backend && ./mvnw spring-boot:run
+cd backend && ./mvnw spring-boot:run   # reads ../.env itself; no exports needed
 ```
 - Health: `curl localhost:8080/actuator/health` → `{"status":"UP"}` (Flyway migrates on startup)
 - API docs: http://localhost:8080/swagger-ui.html — reference in [docs/api.md](docs/api.md), rules in [docs/business-flow.md](docs/business-flow.md)
@@ -23,13 +22,20 @@ Requires Node 22+. With the backend running on port 8080:
 ```bash
 cd frontend && npm install && npm run dev      # http://localhost:5173 (proxies /api to :8080)
 ```
-Load fictional demo data once, into an **empty** database (it goes through the API, so all business rules apply):
+Load fictional demo data once, into a **fresh** database (it goes through the API, so all business rules apply):
 ```bash
-docker compose down -v && docker compose up -d --wait   # reset local DB, then restart the backend
-scripts/seed-demo-data.sh                               # needs curl + jq
+docker compose down -v && docker compose up -d --wait   # reset local DB, then (re)start the backend
+scripts/seed-demo-data.sh                               # needs curl + jq; signs in via the dev issuer
 ```
 Sign in as **Elena Rostova** (resident), **Marcus Vance** (tax officer) or **Sarah Chen** (admin), or switch with
-*Role preview* in the top bar. Demo sign-in has no password; Amazon Cognito replaces it in Stage 8.
+*Role preview* in the top bar.
+
+**Authentication.** Every API call needs a JWT. Locally, `DEV_AUTH=true` turns on a built-in issuer that signs
+Cognito-shaped tokens (no AWS account needed); on an empty database it creates the admin `s.chen@civictax.demo`.
+Deployed environments leave `DEV_AUTH` unset and point at Amazon Cognito instead:
+`SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>`.
+With neither configured the backend refuses to start. In Swagger UI, use **Authorize** with a token from
+`POST /api/dev/token`.
 Checks: `npm run build` (TypeScript + bundle) and `npm run lint`.
 
 ## Run the tests
@@ -45,6 +51,7 @@ Tests start their own throwaway PostgreSQL 17 via Testcontainers; they never tou
 | Persistence | `BackendApplicationTests`, `PersistenceIntegrationTest` | exactly 9 tables, relationships, lazy loading, constraints |
 | API (MockMvc) | `ApiIntegrationTest`, `BillingWorkflowIntegrationTest` | every endpoint, status codes, ProblemDetail bodies, full billing workflow |
 | Transactions | `TransactionIntegrationTest` | rollback after a mid-transaction failure; row locks under concurrent requests |
+| Security | `SecurityIntegrationTest` | 401 for missing/forged/garbage/deactivated tokens; role boundaries; residents only see their own records |
 
 Run one class: `./mvnw test -Dtest=TransactionIntegrationTest`.
 

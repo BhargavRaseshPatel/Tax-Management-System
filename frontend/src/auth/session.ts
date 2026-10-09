@@ -1,13 +1,13 @@
 import { createContext, useContext } from 'react'
-import type { Role, User } from '../api/types'
+import type { Role, SessionUser } from '../api/types'
 
 /**
- * DEMO-ONLY session: you pick an existing user on the login page. There is no password and the backend does not
- * check it. Stage 8 replaces this with Amazon Cognito + JWT, enforced by Spring Security.
+ * Signed-in user + bearer token. Locally the token comes from the backend's dev issuer (DEV_AUTH=true); when
+ * deployed, Amazon Cognito's hosted login issues it instead. Either way the backend verifies every request.
  */
 export interface Session {
-  user: User | null
-  signIn: (user: User) => void
+  user: SessionUser | null
+  signIn: (email: string) => Promise<SessionUser>
   signOut: () => void
 }
 

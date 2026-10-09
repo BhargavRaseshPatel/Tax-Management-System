@@ -1,21 +1,26 @@
 package com.propertytax;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.OK;
+import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.jayway.jsonpath.JsonPath;
+import com.propertytax.security.DevTokenIssuer;
+import com.propertytax.user.User;
+import com.propertytax.user.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
+import org.springframework.test.web.servlet.assertj.MockMvcTester.MockMvcRequestBuilder;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
 /**
@@ -30,17 +35,30 @@ class BillingWorkflowIntegrationTest {
 
 	static final AtomicInteger SEQ = new AtomicInteger();
 
-	@Autowired
-	MockMvcTester mvc;
+	@Autowired MockMvcTester mvc;
+	@Autowired UserRepository users;
+	@Autowired DevTokenIssuer issuer;
+
+	String tokenFor(String uri) {
+		return TestAuth.bearer(users, issuer, uri.startsWith("/api/users") ? User.Role.ADMIN : User.Role.TAX_OFFICER);
+	}
+
+	MockMvcRequestBuilder get(String uri) {
+		return mvc.get().uri(uri).header(AUTHORIZATION, tokenFor(uri));
+	}
 
 	// ---- helpers -------------------------------------------------------------------------------------------
 
 	MvcTestResult post(String uri, String json) {
-		return mvc.post().uri(uri).contentType(APPLICATION_JSON).content(json).exchange();
+		return postAs(tokenFor(uri), uri, json);
+	}
+
+	MvcTestResult postAs(String token, String uri, String json) {
+		return mvc.post().uri(uri).header(AUTHORIZATION, token).contentType(APPLICATION_JSON).content(json).exchange();
 	}
 
 	MvcTestResult put(String uri, String json) {
-		return mvc.put().uri(uri).contentType(APPLICATION_JSON).content(json).exchange();
+		return mvc.put().uri(uri).header(AUTHORIZATION, tokenFor(uri)).contentType(APPLICATION_JSON).content(json).exchange();
 	}
 
 	static <T> T read(MvcTestResult result, String path) {
@@ -57,7 +75,7 @@ class BillingWorkflowIntegrationTest {
 
 	/** Rates are unique per (year, class) across the shared test DB, so create each one only once. */
 	void ensureRate(int year, String rate) {
-		var existing = mvc.get().uri("/api/tax-rates?taxYear=" + year).exchange();
+		var existing = get("/api/tax-rates?taxYear=" + year).exchange();
 		if (((java.util.List<?>) read(existing, "$[?(@.propertyClass == 'RESIDENTIAL')]")).isEmpty()) {
 			assertThat(post("/api/tax-rates", """
 					{"taxYear":%d,"propertyClass":"RESIDENTIAL","rate":%s,"description":"Demo rate (fictional)"}"""
@@ -65,10 +83,6 @@ class BillingWorkflowIntegrationTest {
 		}
 	}
 
-	long user(String role) {
-		return id(post("/api/users", """
-				{"email":"billing-%d@demo.test","fullName":"Billing Test","role":"%s"}""".formatted(SEQ.incrementAndGet(), role)));
-	}
 
 	record Fixture(long accountId, long assessment2026Id) {}
 
@@ -94,10 +108,11 @@ class BillingWorkflowIntegrationTest {
 				{"taxYear":2026,"billType":"%s","issueDate":"2026-02-01","dueDate":"2026-03-01"}""".formatted(type));
 	}
 
-	MvcTestResult pay(long billId, String amount, String reference, long recorder) {
-		return post("/api/tax-bills/" + billId + "/payments", """
-				{"amount":%s,"paymentDate":"2026-06-15","method":"CHEQUE","referenceNumber":"%s","recordedByUserId":%d}"""
-				.formatted(amount, reference, recorder));
+	/** Recorded as whoever the token belongs to; the request body carries no recorder. */
+	MvcTestResult pay(long billId, String amount, String reference, String token) {
+		return postAs(token, "/api/tax-bills/" + billId + "/payments", """
+				{"amount":%s,"paymentDate":"2026-06-15","method":"CHEQUE","referenceNumber":"%s"}"""
+				.formatted(amount, reference));
 	}
 
 	String ref() {
@@ -121,9 +136,9 @@ class BillingWorkflowIntegrationTest {
 
 		assertThat(bill(f.accountId(), "INTERIM")).hasStatus(CONFLICT);
 		assertThat(bill(f.accountId(), "FINAL")).hasStatus(CONFLICT);
-		assertThat(mvc.get().uri("/api/tax-accounts/" + f.accountId() + "/bills"))
+		assertThat(get("/api/tax-accounts/" + f.accountId() + "/bills"))
 				.bodyJson().extractingPath("$.length()").isEqualTo(2);
-		assertThat(mvc.get().uri("/api/tax-accounts/" + f.accountId() + "/balance")).hasStatus(OK)
+		assertThat(get("/api/tax-accounts/" + f.accountId() + "/balance")).hasStatus(OK)
 				.bodyJson().satisfies(json -> {
 					assertThat(json).extractingPath("$.totalBilled").isEqualTo(4875.00);
 					assertThat(json).extractingPath("$.outstanding").isEqualTo(4875.00);
@@ -145,14 +160,14 @@ class BillingWorkflowIntegrationTest {
 	@Test
 	void paymentsDriveBillStatusAndRejectOverpaymentAndDuplicates() {
 		var f = account(false);
-		long officer = user("TAX_OFFICER");
-		long resident = user("RESIDENT");
+		var officer = TestAuth.bearer(users, issuer, User.Role.TAX_OFFICER);
+		var resident = TestAuth.bearer(users, issuer, User.Role.RESIDENT);
 		long billId = id(bill(f.accountId(), "FINAL")); // 4,875.00
 		var firstRef = ref();
 
 		var first = pay(billId, "1000.00", firstRef, officer);
 		assertThat(first).hasStatus(CREATED).bodyJson().extractingPath("$.status").isEqualTo("RECORDED");
-		assertThat(mvc.get().uri("/api/tax-bills/" + billId)).bodyJson().satisfies(json -> {
+		assertThat(get("/api/tax-bills/" + billId)).bodyJson().satisfies(json -> {
 			assertThat(json).extractingPath("$.status").isEqualTo("PARTIALLY_PAID");
 			assertThat(json).extractingPath("$.outstandingAmount").isEqualTo(3875.00);
 		});
@@ -160,23 +175,23 @@ class BillingWorkflowIntegrationTest {
 		assertThat(pay(billId, "3875.01", ref(), officer)).hasStatus(CONFLICT)
 				.bodyJson().extractingPath("$.detail").asString().contains("exceeds outstanding 3875.00");
 		assertThat(pay(billId, "10.00", firstRef, officer)).hasStatus(CONFLICT);   // duplicate reference
-		assertThat(pay(billId, "10.00", ref(), resident)).hasStatus(BAD_REQUEST);  // residents can't record
-		assertThat(mvc.get().uri("/api/tax-bills/" + billId + "/payments"))
+		assertThat(pay(billId, "10.00", ref(), resident)).hasStatus(FORBIDDEN);    // residents can't record
+		assertThat(get("/api/tax-bills/" + billId + "/payments"))
 				.bodyJson().extractingPath("$.length()").isEqualTo(1); // rejected attempts left nothing behind
 
 		assertThat(pay(billId, "3875.00", ref(), officer)).hasStatus(CREATED);
-		assertThat(mvc.get().uri("/api/tax-bills/" + billId)).bodyJson().extractingPath("$.status").isEqualTo("PAID");
+		assertThat(get("/api/tax-bills/" + billId)).bodyJson().extractingPath("$.status").isEqualTo("PAID");
 		assertThat(pay(billId, "1.00", ref(), officer)).hasStatus(CONFLICT); // bill is PAID
-		assertThat(mvc.get().uri("/api/tax-accounts/" + f.accountId() + "/balance"))
+		assertThat(get("/api/tax-accounts/" + f.accountId() + "/balance"))
 				.bodyJson().extractingPath("$.outstanding").isEqualTo(0.00);
 
 		long firstId = id(first);
-		assertThat(mvc.get().uri("/api/payments/" + firstId)).hasStatusOk()
+		assertThat(get("/api/payments/" + firstId)).hasStatusOk()
 				.bodyJson().extractingPath("$.referenceNumber").isEqualTo(firstRef);
 		assertThat(post("/api/payments/" + firstId + "/reverse", "")).hasStatus(OK)
 				.bodyJson().extractingPath("$.status").isEqualTo("REVERSED");
 		assertThat(post("/api/payments/" + firstId + "/reverse", "")).hasStatus(CONFLICT);
-		assertThat(mvc.get().uri("/api/tax-bills/" + billId)).bodyJson().satisfies(json -> {
+		assertThat(get("/api/tax-bills/" + billId)).bodyJson().satisfies(json -> {
 			assertThat(json).extractingPath("$.status").isEqualTo("PARTIALLY_PAID");
 			assertThat(json).extractingPath("$.outstandingAmount").isEqualTo(1000.00);
 		});
@@ -200,7 +215,7 @@ class BillingWorkflowIntegrationTest {
 			assertThat(json).extractingPath("$.amount").isEqualTo(5250.00); // 700,000 × 0.0075
 			assertThat(json).extractingPath("$.billNumber").asString().endsWith("-2026-F-2");
 		});
-		assertThat(mvc.get().uri("/api/tax-accounts/" + f.accountId() + "/balance"))
+		assertThat(get("/api/tax-accounts/" + f.accountId() + "/balance"))
 				.bodyJson().extractingPath("$.totalBilled").isEqualTo(5250.00); // cancelled bill excluded
 	}
 

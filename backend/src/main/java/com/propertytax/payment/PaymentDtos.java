@@ -15,16 +15,12 @@ public final class PaymentDtos {
 
 	private PaymentDtos() {}
 
-	/**
-	 * Records a simulated payment; no money moves. referenceNumber must be unique (duplicate guard).
-	 * recordedByUserId is temporary: Stage 8 takes the recorder from the authenticated JWT instead.
-	 */
+	/** Records a simulated payment; no money moves. referenceNumber must be unique (duplicate guard). */
 	public record RecordPaymentRequest(
 			@NotNull @DecimalMin("0.01") @Digits(integer = 12, fraction = 2) BigDecimal amount,
 			@NotNull @PastOrPresent LocalDate paymentDate,
 			@NotNull Payment.Method method,
-			@NotBlank @Size(max = 50) String referenceNumber,
-			@NotNull Long recordedByUserId) {}
+			@NotBlank @Size(max = 50) String referenceNumber) {}
 
 	public record PaymentResponse(Long id, Long taxBillId, BigDecimal amount, LocalDate paymentDate,
 			Payment.Method method, String referenceNumber, Payment.Status status, Long recordedById,

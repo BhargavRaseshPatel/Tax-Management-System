@@ -1,7 +1,21 @@
 # REST API
 
-Interactive docs: **http://localhost:8080/swagger-ui.html** · OpenAPI JSON: `/v3/api-docs`.
-All data is fictional. No authentication yet (Stage 8 adds Cognito JWT + role checks).
+Interactive docs: **http://localhost:8080/swagger-ui.html** · OpenAPI JSON: `/v3/api-docs`. All data is fictional.
+
+## Authentication & access
+Send `Authorization: Bearer <JWT>`. The token proves identity (`email` claim); the **role comes from the users table**.
+Locally get a token from `POST /api/dev/token {"email": "..."}` (only when `DEV_AUTH=true`); deployed, from Cognito.
+
+| Who | Can |
+|---|---|
+| Anyone | `GET /actuator/health`, API docs; `GET /api/dev/users`, `POST /api/dev/token` (local only) |
+| Any signed-in user | `GET /api/me` (incl. `ownerId`), `GET /api/tax-rates` |
+| RESIDENT | `GET` single records tied to a property they own: owner, property (+owners, assessments, tax-account), assessment, tax account (+bills, balance), bill (+payments), payment. Anything else → 403 (unknown ids too, so existence never leaks) |
+| TAX_OFFICER | read everything; create/change all tax data; read users (to link owners) |
+| ADMIN | create/change users; read-only on tax data |
+
+`401` = missing, invalid, expired, or deactivated-user token. `403` = signed in but not allowed.
+Payments are recorded as the authenticated officer (no recorder in the request body).
 
 ## Conventions
 - JSON in/out; request DTOs validated with Bean Validation. Entities are never serialized.
@@ -21,7 +35,8 @@ All data is fictional. No authentication yet (Stage 8 adds Cognito JWT + role ch
 ## Endpoints
 | # | Method & path | Notes |
 |---|---|---|
-| 1 | `POST/GET /api/users`, `GET/PUT /api/users/{id}` | email stored lowercase; deactivate via `active=false` |
+| 1 | `GET /api/me` | current user + linked `ownerId` |
+| 1 | `POST/GET /api/users`, `GET/PUT /api/users/{id}` | email stored lowercase; deactivate via `active=false` (blocks sign-in immediately) |
 | 1 | `POST/GET /api/owners?name=`, `GET/PUT /api/owners/{id}` | optional `userId` must be a RESIDENT |
 | 2 | `POST/GET /api/properties?q=`, `GET/PUT /api/properties/{id}` | `q` matches roll number or address |
 | 2 | `GET/POST /api/properties/{id}/owners`, `DELETE /api/properties/{id}/owners/{ownerId}` | shares ≤ 100% |

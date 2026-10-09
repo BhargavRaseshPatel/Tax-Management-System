@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import {
   AppBar, Avatar, Box, Chip, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Stack,
   ToggleButton, ToggleButtonGroup, Toolbar, Tooltip, Typography, useMediaQuery,
@@ -16,7 +16,7 @@ import PercentIcon from '@mui/icons-material/Percent'
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutlined'
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
 import { useApi } from '../api/client'
-import type { Page, Role, User } from '../api/types'
+import type { Role, SessionUser } from '../api/types'
 import { ROLES } from '../api/types'
 import { HOME_BY_ROLE, ROLE_LABEL, useSession } from '../auth/session'
 import { tokens } from '../theme'
@@ -117,14 +117,15 @@ function ApiStatus() {
 }
 
 /**
- * Role preview signs in as the first active demo user of the chosen role, so every screen still shows real data.
- * Demo-only; removed when Cognito sign-in arrives in Stage 8.
+ * LOCAL DEV ONLY: role preview signs in (gets a real token) as the first active user of the chosen role.
+ * Uses the dev sign-in endpoints, so it disappears automatically when the backend runs with Cognito.
  */
-function RolePreview({ user }: { user: User }) {
+function RolePreview({ user }: { user: SessionUser }) {
   const { signIn } = useSession()
   const navigate = useNavigate()
-  const users = useApi<Page<User>>('/api/users?size=100&sort=id')
-  const firstOf = (role: Role) => users.data?.content.find((u) => u.role === role && u.active)
+  const users = useApi<SessionUser[]>('/api/dev/users')
+  const firstOf = (role: Role) => users.data?.find((u) => u.role === role)
+  if (users.isError) return null
 
   return (
     <ToggleButtonGroup
@@ -133,10 +134,7 @@ function RolePreview({ user }: { user: User }) {
       value={user.role}
       onChange={(_, role: Role | null) => {
         const next = role && firstOf(role)
-        if (next) {
-          signIn(next)
-          navigate(HOME_BY_ROLE[next.role])
-        }
+        if (next) signIn(next.email).then((u) => navigate(HOME_BY_ROLE[u.role]))
       }}
       sx={{ bgcolor: tokens.panel, '& .MuiToggleButton-root': { px: 1.25, py: 0.4, fontSize: '0.72rem', fontWeight: 600, border: 0 } }}
     >
@@ -155,7 +153,7 @@ export function AppShell() {
   const desktop = useMediaQuery('(min-width:900px)')
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
-  if (!user) return null // routes guard this; keeps types honest
+  if (!user) return <Navigate to="/login" replace /> // signed out, or the token expired
 
   const current = NAV[user.role].items.find((i) => i.to === location.pathname)?.label ?? ''
   const sidebar = <Sidebar role={user.role} onNavigate={() => setMobileOpen(false)} />

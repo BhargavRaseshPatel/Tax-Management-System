@@ -4,37 +4,43 @@
 #
 # Usage:  scripts/seed-demo-data.sh                 # API at http://localhost:8080
 #         API=http://localhost:8081 scripts/seed-demo-data.sh
-# Needs:  curl, jq, and an EMPTY database (reset with: docker compose down -v && docker compose up -d --wait)
+# Needs:  curl, jq, the backend running with DEV_AUTH=true (local sign-in), and an EMPTY database
+#         (reset with: docker compose down -v && docker compose up -d --wait, then restart the backend).
 set -euo pipefail
 
 API="${API:-http://localhost:8080}"
 command -v jq >/dev/null || { echo "jq is required (brew install jq)"; exit 1; }
 
-call() { # call METHOD PATH [JSON]
+TOKEN=""
+call() { # call METHOD PATH [JSON]   (sends $TOKEN as the bearer token)
   local out
-  if ! out=$(curl -sS --fail-with-body -X "$1" "$API$2" -H 'Content-Type: application/json' ${3:+-d "$3"}); then
+  if ! out=$(curl -sS --fail-with-body -X "$1" "$API$2" -H 'Content-Type: application/json' \
+      ${TOKEN:+-H "Authorization: Bearer $TOKEN"} ${3:+-d "$3"}); then
     echo "✗ $1 $2 failed: $out" >&2
     exit 1
   fi
   printf '%s' "$out"
 }
 id() { jq -r '.id'; }
+sign_in() { TOKEN=$(call POST /api/dev/token "{\"email\":\"$1\"}" | jq -r .accessToken); }
 
-existing=$(call GET '/api/users?size=1' | jq '.page.totalElements')
-if [[ "$existing" != "0" && "${FORCE:-0}" != "1" ]]; then
-  echo "Database already has $existing user(s). This script expects an empty database:"
+existing=$(call GET /api/dev/users | jq length) || { echo "Is the backend running with DEV_AUTH=true?"; exit 1; }
+if [[ "$existing" != "1" && "${FORCE:-0}" != "1" ]]; then
+  echo "Database already has $existing user(s). This script expects a fresh database (only the bootstrap admin):"
   echo "  docker compose down -v && docker compose up -d --wait   (then restart the backend)"
   exit 1
 fi
 
-echo "→ Users"
-call POST /api/users '{"email":"s.chen@civictax.demo","fullName":"Sarah Chen","role":"ADMIN"}' >/dev/null
-OFFICER=$(call POST /api/users '{"email":"m.vance@civictax.demo","fullName":"Marcus Vance","role":"TAX_OFFICER"}' | id)
+echo "→ Users (as the bootstrap admin Sarah Chen)"
+sign_in s.chen@civictax.demo
+call POST /api/users '{"email":"m.vance@civictax.demo","fullName":"Marcus Vance","role":"TAX_OFFICER"}' >/dev/null
 call POST /api/users '{"email":"d.lin@civictax.demo","fullName":"David Lin","role":"TAX_OFFICER"}' >/dev/null
 ELENA_U=$(call POST /api/users '{"email":"elena.rostova@example.ca","fullName":"Elena Rostova","role":"RESIDENT"}' | id)
 ARIS_U=$(call POST /api/users '{"email":"a.thorne@example.ca","fullName":"Aris Thorne","role":"RESIDENT"}' | id)
 BELL=$(call POST /api/users '{"email":"j.bell@civictax.demo","fullName":"Jordan Bell","role":"ADMIN"}' | id)
 call PUT "/api/users/$BELL" '{"fullName":"Jordan Bell","role":"ADMIN","active":false}' >/dev/null
+
+sign_in m.vance@civictax.demo # tax data is managed by a tax officer
 
 echo "→ Owners"
 ELENA=$(call POST /api/owners "{\"userId\":$ELENA_U,\"fullName\":\"Elena Rostova\",\"email\":\"elena.rostova@example.ca\",\"phone\":\"(519) 555-0194\",\"mailingAddress\":\"742 Evergreen Terr, Springfield ON N2L 3G1\"}" | id)
@@ -62,8 +68,8 @@ account() { call POST /api/tax-accounts "{\"propertyId\":$1}" | id; }
 bill() { # bill ACCOUNT TYPE ISSUE DUE → prints bill JSON
   call POST "/api/tax-accounts/$1/bills" "{\"taxYear\":2026,\"billType\":\"$2\",\"issueDate\":\"$3\",\"dueDate\":\"$4\"}"
 }
-pay() { # pay BILL AMOUNT DATE METHOD REF → prints payment id
-  call POST "/api/tax-bills/$1/payments" "{\"amount\":$2,\"paymentDate\":\"$3\",\"method\":\"$4\",\"referenceNumber\":\"$5\",\"recordedByUserId\":$OFFICER}" | id
+pay() { # pay BILL AMOUNT DATE METHOD REF → prints payment id (recorded as the signed-in officer)
+  call POST "/api/tax-bills/$1/payments" "{\"amount\":$2,\"paymentDate\":\"$3\",\"method\":\"$4\",\"referenceNumber\":\"$5\"}" | id
 }
 
 echo "→ Properties, ownership, assessments, accounts"

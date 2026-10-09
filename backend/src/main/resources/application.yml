@@ -1,6 +1,9 @@
 spring:
   application:
     name: property-tax-backend
+  # Local runs read the repo's .env (KEY=VALUE) directly; real environment variables still win.
+  config:
+    import: optional:file:../.env[.properties],optional:file:.env[.properties]
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:property_tax}
     username: ${DB_USERNAME:property_tax}
@@ -13,6 +16,11 @@ spring:
     web:
       pageable:
         max-page-size: 100
+
+app:
+  # LOCAL ONLY: in-process token issuer standing in for Amazon Cognito (see DevTokenIssuer). Never true when deployed;
+  # deployed environments set SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI to the Cognito user pool instead.
+  dev-auth: ${DEV_AUTH:false}
 
 springdoc:
   swagger-ui:

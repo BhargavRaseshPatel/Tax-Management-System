@@ -12,19 +12,40 @@ export class ApiError extends Error {
   }
 }
 
-/** The only place that talks HTTP. Stage 8 adds the Cognito bearer token here. */
+let authToken: string | null = null
+let unauthorizedHandler: (() => void) | null = null
+
+export function setAuthToken(token: string | null) {
+  authToken = token
+}
+
+/** Registers what to do when the API rejects the token; returns the unregister function. */
+export function onUnauthorized(handler: () => void) {
+  unauthorizedHandler = handler
+  return () => { unauthorizedHandler = null }
+}
+
+/** The only place that talks HTTP; attaches the bearer token to every request. */
 export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   let response: Response
+  const headers: Record<string, string> = {}
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
   try {
     response = await fetch(path, {
       method: options.method ?? 'GET',
-      headers: options.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     })
   } catch {
     throw new ApiError(0, { detail: 'Cannot reach the API. Is the Spring Boot backend running on port 8080?' })
   }
   if (response.status === 204) return undefined as T
+  if (response.status === 401 && authToken) {
+    unauthorizedHandler?.()
+    throw new ApiError(401, { detail: 'Your session has expired. Please sign in again.' })
+  }
+  if (response.status === 403) throw new ApiError(403, { detail: 'You do not have access to this record.' })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     // The Vite proxy answers 500 with an empty body when the backend is down.

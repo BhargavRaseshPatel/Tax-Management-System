@@ -30,7 +30,8 @@ public class PaymentService {
 		this.users = users;
 	}
 
-	public PaymentResponse record(Long taxBillId, RecordPaymentRequest r) {
+	/** recorderId is the authenticated user, never taken from the request body. */
+	public PaymentResponse record(Long taxBillId, RecordPaymentRequest r, Long recorderId) {
 		var bill = taxBills.requireForUpdate(taxBillId);
 		if (bill.getStatus() == TaxBill.Status.CANCELLED || bill.getStatus() == TaxBill.Status.PAID) {
 			throw ApiErrors.conflict("Tax bill " + taxBillId + " is " + bill.getStatus());
@@ -38,7 +39,7 @@ public class PaymentService {
 		if (payments.existsByReferenceNumber(r.referenceNumber())) {
 			throw ApiErrors.conflict("Payment reference " + r.referenceNumber() + " was already recorded");
 		}
-		var recorder = users.require(r.recordedByUserId());
+		var recorder = users.require(recorderId);
 		if (!recorder.isActive() || recorder.getRole() == User.Role.RESIDENT) {
 			throw ApiErrors.badRequest("User " + recorder.getId() + " can't record payments");
 		}

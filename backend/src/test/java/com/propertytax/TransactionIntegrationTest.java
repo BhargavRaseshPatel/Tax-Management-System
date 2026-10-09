@@ -106,9 +106,8 @@ class TransactionIntegrationTest {
 		return new GenerateBillRequest(2030, TaxBill.Type.FINAL, LocalDate.of(2030, 2, 1), LocalDate.of(2030, 3, 1));
 	}
 
-	RecordPaymentRequest pay(String amount, String reference, long officer) {
-		return new RecordPaymentRequest(new BigDecimal(amount), LocalDate.of(2026, 1, 1), Payment.Method.COUNTER,
-				reference, officer);
+	RecordPaymentRequest pay(String amount, String reference) {
+		return new RecordPaymentRequest(new BigDecimal(amount), LocalDate.of(2026, 1, 1), Payment.Method.COUNTER, reference);
 	}
 
 	@Test
@@ -130,7 +129,7 @@ class TransactionIntegrationTest {
 		var tasks = new ArrayList<Callable<?>>();
 		for (int i = 0; i < THREADS; i++) {
 			var reference = "RACE-PAY-" + SEQ.incrementAndGet();
-			tasks.add(() -> paymentService.record(billId, pay("400.00", reference, officer)));
+			tasks.add(() -> paymentService.record(billId, pay("400.00", reference), officer));
 		}
 
 		assertThat(raceAll(tasks)).isEqualTo(2); // 2 × 400 fits in 1,000; a third would overpay
@@ -147,8 +146,8 @@ class TransactionIntegrationTest {
 
 		// Different bills → different row locks, so the DB unique constraint is what stops the second insert.
 		assertThat(raceAll(List.of(
-				() -> paymentService.record(billA, pay("100.00", reference, officer)),
-				() -> paymentService.record(billB, pay("100.00", reference, officer))))).isEqualTo(1);
+				() -> paymentService.record(billA, pay("100.00", reference), officer),
+				() -> paymentService.record(billB, pay("100.00", reference), officer)))).isEqualTo(1);
 
 		var statuses = List.of(taxBills.findById(billA).orElseThrow().getStatus(),
 				taxBills.findById(billB).orElseThrow().getStatus());
@@ -165,7 +164,7 @@ class TransactionIntegrationTest {
 		doThrow(new IllegalStateException("simulated crash after insert")).when(payments).flush();
 
 		// The payment row is inserted (IDENTITY) and the bill status changed before flush() fails.
-		assertThatThrownBy(() -> paymentService.record(billId, pay("100.00", reference, officer)))
+		assertThatThrownBy(() -> paymentService.record(billId, pay("100.00", reference), officer))
 				.hasMessageContaining("simulated crash");
 
 		assertThat(payments.existsByReferenceNumber(reference)).isFalse();
