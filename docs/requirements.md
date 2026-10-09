@@ -29,5 +29,6 @@ Formula: `Assessed Value × Applicable Tax Rate = Tax Amount` (rounded to cents,
 | Stage | Status |
 |---|---|
 | 1 Foundation | Done |
-| 2 PostgreSQL + Flyway schema | Done — awaiting approval |
-| 3–19 | Not started |
+| 2 PostgreSQL + Flyway schema | Done |
+| 3 JPA entities + repositories | Done — awaiting approval (DTOs created with their endpoints in Stage 4) |
+| 4–19 | Not started |

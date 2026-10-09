@@ -13,7 +13,7 @@ Modular monolith, packaged **by feature**, layered inside each feature:
 ```
 com.propertytax
 ├── BackendApplication
-├── common/        exception handling, shared config      (added when first needed)
+├── common/        BaseEntity (id + timestamps); exception handling later
 ├── user/          controller · service · repository · dto · mapper · entity
 ├── owner/
 ├── property/      (incl. property_owners)
