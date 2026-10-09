@@ -18,6 +18,20 @@ cd backend && ./mvnw spring-boot:run
 - API docs: http://localhost:8080/swagger-ui.html — reference in [docs/api.md](docs/api.md), rules in [docs/business-flow.md](docs/business-flow.md)
 - Stop: `Ctrl+C`, then `docker compose stop` (data kept) or `docker compose down -v` (data deleted)
 
+## Run the frontend
+Requires Node 22+. With the backend running on port 8080:
+```bash
+cd frontend && npm install && npm run dev      # http://localhost:5173 (proxies /api to :8080)
+```
+Load fictional demo data once, into an **empty** database (it goes through the API, so all business rules apply):
+```bash
+docker compose down -v && docker compose up -d --wait   # reset local DB, then restart the backend
+scripts/seed-demo-data.sh                               # needs curl + jq
+```
+Sign in as **Elena Rostova** (resident), **Marcus Vance** (tax officer) or **Sarah Chen** (admin), or switch with
+*Role preview* in the top bar. Demo sign-in has no password; Amazon Cognito replaces it in Stage 8.
+Checks: `npm run build` (TypeScript + bundle) and `npm run lint`.
+
 ## Run the tests
 ```bash
 cd backend && ./mvnw test

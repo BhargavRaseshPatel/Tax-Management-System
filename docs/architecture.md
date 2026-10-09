@@ -33,6 +33,19 @@ Per feature: `XController` (package-private, HTTP only) · `XService` (transacti
 Shared: `common/ApiErrors` (404/409/400 factories), `common/GlobalExceptionHandler` (ProblemDetail for validation
 and DB constraint errors). API reference: [api.md](api.md).
 
+## Frontend (`/frontend`)
+React 19 + TypeScript + Vite + MUI 9 + React Router + TanStack Query. Design reference: Google Stitch mock-ups.
+```
+src/api/        client.ts (the only fetch; ProblemDetail → ApiError; useApi / useApiMutation), types.ts (DTO mirrors)
+src/auth/       demo session (pick a user; Stage 8 swaps in Cognito)
+src/components/ AppShell (role nav, role preview), ui.tsx (StatCard, StatusChip, SectionCard, FormDialog…), format.ts
+src/pages/      resident/ · officer/ · admin/   one file per screen
+```
+- Every number comes from the API; the UI never calculates tax, balances or statuses (it only sums for display).
+- One cache key per URL; any successful write refetches all queries (simple and always consistent for a demo).
+- Route guards only steer navigation — they are not security. The backend enforces roles from Stage 8.
+- Static mock data only where no backend exists yet (Reports job tracker), always labelled "Mock data".
+
 ## Dependency introduction plan
 | Stage | Adds |
 |---|---|

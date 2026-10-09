@@ -34,5 +34,6 @@ final = annual − interim; overpayments rejected (decided in Stage 5).
 | 3 JPA entities + repositories | Done |
 | 4 REST APIs | Done |
 | 5 Business logic | Done. Rules in [business-flow.md](business-flow.md) |
-| 6 Backend testing | Done — awaiting approval. Authorization tests deferred to Stage 8 (no auth exists yet) |
-| 7–19 | Not started |
+| 6 Backend testing | Done. Authorization tests deferred to Stage 8 |
+| 7 React frontend | Done — awaiting approval. Uses live APIs; static mock data only for report jobs (Stages 11–13) |
+| 8–19 | Not started |
