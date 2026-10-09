@@ -27,6 +27,14 @@ public class Property extends BaseEntity {
 		this.propertyClass = propertyClass;
 	}
 
+	public void update(String rollNumber, String streetAddress, String city, String postalCode, PropertyClass propertyClass) {
+		this.rollNumber = rollNumber;
+		this.streetAddress = streetAddress;
+		this.city = city;
+		this.postalCode = postalCode;
+		this.propertyClass = propertyClass;
+	}
+
 	public String getRollNumber() { return rollNumber; }
 	public String getStreetAddress() { return streetAddress; }
 	public String getCity() { return city; }

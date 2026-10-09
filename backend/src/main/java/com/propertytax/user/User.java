@@ -28,6 +28,12 @@ public class User extends BaseEntity {
 		this.role = role;
 	}
 
+	public void update(String fullName, Role role, boolean active) {
+		this.fullName = fullName;
+		this.role = role;
+		this.active = active;
+	}
+
 	public String getEmail() { return email; }
 	public String getFullName() { return fullName; }
 	public Role getRole() { return role; }

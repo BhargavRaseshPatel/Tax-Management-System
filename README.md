@@ -12,6 +12,7 @@ set -a; . ./.env; set +a          # export DB_* for Spring
 cd backend && ./mvnw spring-boot:run
 curl localhost:8080/actuator/health   # {"status":"UP"} — Flyway migrates on startup
 ```
+API docs: http://localhost:8080/swagger-ui.html (see [docs/api.md](docs/api.md)).
 
 Tests start their own throwaway PostgreSQL via Testcontainers (Docker must be running):
 ```bash

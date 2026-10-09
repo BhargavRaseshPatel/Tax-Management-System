@@ -36,6 +36,12 @@ public class Assessment extends BaseEntity {
 		this.assessmentDate = assessmentDate;
 	}
 
+	public void update(int taxYear, BigDecimal assessedValue, LocalDate assessmentDate) {
+		this.taxYear = taxYear;
+		this.assessedValue = assessedValue;
+		this.assessmentDate = assessmentDate;
+	}
+
 	public Property getProperty() { return property; }
 	public Integer getTaxYear() { return taxYear; }
 	public BigDecimal getAssessedValue() { return assessedValue; }

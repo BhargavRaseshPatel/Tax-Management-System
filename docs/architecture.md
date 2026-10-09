@@ -28,6 +28,11 @@ Packages are created in the stage that first needs them — no empty scaffolding
 Request flow: `Controller (DTO, @Valid) → Service (@Transactional, business rules) → Repository (JPA) → PostgreSQL`.
 Entities never leave the service layer; controllers speak DTOs only.
 
+Per feature: `XController` (package-private, HTTP only) · `XService` (transactions, rules, returns DTOs) ·
+`XRepository` (`require(id)` → 404) · `XDtos` (request/response records; `Response.from(entity)` is the mapper) · entity.
+Shared: `common/ApiErrors` (404/409/400 factories), `common/GlobalExceptionHandler` (ProblemDetail for validation
+and DB constraint errors). API reference: [api.md](api.md).
+
 ## Dependency introduction plan
 | Stage | Adds |
 |---|---|

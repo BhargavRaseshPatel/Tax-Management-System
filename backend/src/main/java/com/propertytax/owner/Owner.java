@@ -32,6 +32,14 @@ public class Owner extends BaseEntity {
 		this.mailingAddress = mailingAddress;
 	}
 
+	public void update(User user, String fullName, String email, String phone, String mailingAddress) {
+		this.user = user;
+		this.fullName = fullName;
+		this.email = email;
+		this.phone = phone;
+		this.mailingAddress = mailingAddress;
+	}
+
 	public User getUser() { return user; }
 	public String getFullName() { return fullName; }
 	public String getEmail() { return email; }

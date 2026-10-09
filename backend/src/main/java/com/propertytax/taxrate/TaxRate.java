@@ -34,6 +34,11 @@ public class TaxRate extends BaseEntity {
 		this.description = description;
 	}
 
+	public void update(BigDecimal rate, String description) {
+		this.rate = rate;
+		this.description = description;
+	}
+
 	public Integer getTaxYear() { return taxYear; }
 	public PropertyClass getPropertyClass() { return propertyClass; }
 	public BigDecimal getRate() { return rate; }

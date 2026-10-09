@@ -9,6 +9,14 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+
+springdoc:
+  swagger-ui:
+    tags-sorter: alpha # tags are numbered "1. Users" ... "7. Payments" in workflow order
 
 server:
   port: ${SERVER_PORT:8080}
