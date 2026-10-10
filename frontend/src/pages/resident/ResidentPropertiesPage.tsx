@@ -4,6 +4,7 @@ import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlin
 import HomeWorkOutlinedIcon from '@mui/icons-material/HomeWorkOutlined'
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import { BillPdfButton } from '../../components/BillPdfButton'
 import { date, money } from '../../components/format'
 import { EmptyState, Mono, PageHeader, QueryState, SectionCard, StatCard, StatusChip } from '../../components/ui'
 import { tokens } from '../../theme'
@@ -163,7 +164,7 @@ export function BillsTable({ bills }: { bills: ResidentProperty['bills'] }) {
       <TableHead>
         <TableRow>
           <TableCell>Bill</TableCell><TableCell>Type</TableCell><TableCell>Due</TableCell>
-          <TableCell align="right">Amount</TableCell><TableCell align="right">Outstanding</TableCell><TableCell>Status</TableCell>
+          <TableCell align="right">Amount</TableCell><TableCell align="right">Outstanding</TableCell><TableCell>Status</TableCell><TableCell>PDF</TableCell>
         </TableRow>
       </TableHead>
       <TableBody>
@@ -175,6 +176,7 @@ export function BillsTable({ bills }: { bills: ResidentProperty['bills'] }) {
             <TableCell align="right"><Mono>{money(b.amount)}</Mono></TableCell>
             <TableCell align="right"><Mono sx={{ color: b.outstandingAmount > 0 ? tokens.danger : undefined }}>{money(b.outstandingAmount)}</Mono></TableCell>
             <TableCell><StatusChip value={b.status} /></TableCell>
+            <TableCell><BillPdfButton bill={b} /></TableCell>
           </TableRow>
         ))}
       </TableBody>

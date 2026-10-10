@@ -92,6 +92,8 @@ export interface TaxBill extends Audited {
   issueDate: string
   dueDate: string
   status: BillStatus
+  /** When the PDF was first generated and stored; null if nobody has downloaded it yet. */
+  documentGeneratedAt: string | null
 }
 
 export interface AccountBalance {

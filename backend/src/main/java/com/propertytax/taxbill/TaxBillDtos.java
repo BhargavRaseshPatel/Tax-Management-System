@@ -22,15 +22,15 @@ public final class TaxBillDtos {
 	public record TaxBillResponse(Long id, String billNumber, Long taxAccountId, Long assessmentId, Long taxRateId,
 			Integer taxYear, TaxBill.Type billType, BigDecimal amount, BigDecimal paidAmount,
 			BigDecimal outstandingAmount, LocalDate issueDate, LocalDate dueDate, TaxBill.Status status,
-			Instant createdAt, Instant updatedAt) {
+			Instant documentGeneratedAt, Instant createdAt, Instant updatedAt) {
 
 		static TaxBillResponse from(TaxBill b, BigDecimal paid) {
 			var outstanding = b.getStatus() == TaxBill.Status.CANCELLED ? BigDecimal.ZERO.setScale(2)
 					: b.getAmount().subtract(paid);
 			return new TaxBillResponse(b.getId(), b.getBillNumber(), b.getTaxAccount().getId(),
 					b.getAssessment().getId(), b.getTaxRate().getId(), b.getTaxYear(), b.getBillType(), b.getAmount(),
-					paid, outstanding, b.getIssueDate(), b.getDueDate(), b.getStatus(), b.getCreatedAt(),
-					b.getUpdatedAt());
+					paid, outstanding, b.getIssueDate(), b.getDueDate(), b.getStatus(), b.getDocumentGeneratedAt(),
+					b.getCreatedAt(), b.getUpdatedAt());
 		}
 	}
 

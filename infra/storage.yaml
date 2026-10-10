@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CivicTax demo - private S3 bucket for generated documents (tax-bill PDFs now, reports in Stage 13) and the
+  least-privilege IAM policy the application's task role will use. Independent of the network and database stacks.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: civictax
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+
+Resources:
+  DocumentsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain # documents are records: deleting the stack never deletes them (see clean-up in deployment.md)
+    UpdateReplacePolicy: Retain
+    Properties:
+      # Bucket names are global, so include the account id and region.
+      BucketName: !Sub '${ProjectName}-documents-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced # ACLs disabled; access is by IAM policy only
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256 # S3-managed keys; Stage 16 switches to a customer-managed KMS key
+      VersioningConfiguration:
+        Status: Enabled # an overwritten or deleted document can be recovered
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  # Refuse any request that is not over TLS, whoever makes it.
+  DocumentsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocumentsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt DocumentsBucket.Arn
+              - !Sub '${DocumentsBucket.Arn}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+
+  # Exactly what the application does and nothing more: read and write objects under two prefixes.
+  # No list, no delete, no bucket administration. Attached to the ECS task role in Stage 14.
+  DocumentsAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: CivicTax application - read/write generated documents only
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ReadWriteGeneratedDocuments
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource:
+              - !Sub '${DocumentsBucket.Arn}/tax-bills/*'
+              - !Sub '${DocumentsBucket.Arn}/reports/*'
+
+Outputs:
+  DocumentsBucketName:
+    Description: DOCUMENTS_BUCKET for the backend
+    Value: !Ref DocumentsBucket
+    Export: { Name: !Sub '${ProjectName}-DocumentsBucketName' }
+  DocumentsAccessPolicyArn:
+    Value: !Ref DocumentsAccessPolicy
+    Export: { Name: !Sub '${ProjectName}-DocumentsAccessPolicyArn' }

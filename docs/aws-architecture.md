@@ -19,7 +19,8 @@ flowchart LR
   end
   api -. JWT .-> cognito[Amazon Cognito · Stage 8 swap-in]
   api --> sm[Secrets Manager<br/>DB credentials ✔]
-  worker --> s3[(S3 reports · Stage 11)]
+  api --> s3[(S3 documents · storage.yaml ✔)]
+  worker --> s3
   worker --> ddb[(DynamoDB report_jobs · Stage 12)]
   sfn[Step Functions · Stage 13] --> worker
 ```
@@ -36,6 +37,16 @@ flowchart LR
 - **Schema:** identical to local. Flyway migrates on application start; local PostgreSQL 17 and Aurora PostgreSQL 17
   run the same SQL.
 
+## Document storage (Stage 11)
+- **Private by construction:** Block Public Access (all four), ACLs disabled, TLS-only bucket policy. There are no
+  public objects and no presigned URLs: clients download through `GET /api/tax-bills/{id}/document`, so the same role
+  and data-ownership rules as every other endpoint apply, and responses are `Cache-Control: no-store`.
+- **Least privilege:** the application may only get and put objects under `tax-bills/` and `reports/`.
+- **Encryption:** SSE-S3 by bucket default and on every put (customer-managed KMS key in Stage 16); versioning on.
+- **Metadata** (key, size, generated time) lives in PostgreSQL on `tax_bills`; keys contain no personal data.
+- **Local:** the `adobe/s3mock` emulator in Docker Compose and in tests. (LocalStack now requires a paid/registered
+  token, so each AWS service gets its own small emulator instead.)
+
 ## Deliberate simplifications (demo cost) and their upgrade path
 | Simplification | Production upgrade |
 |---|---|
@@ -43,3 +54,4 @@ flowchart LR
 | One Aurora instance, 0–1 ACU, auto-pause | Second instance in another AZ (automatic failover), higher minimum capacity, no pause |
 | Application connects as the master user (it needs DDL for Flyway) | Separate least-privilege runtime user; migrations run by a dedicated task/role |
 | `DeletionProtection` off by default | On, plus longer backup retention |
+| PDFs are generated inside the download request and proxied through the API | Generate in the async worker (Stage 13); presigned URLs or CloudFront signed URLs for large files |

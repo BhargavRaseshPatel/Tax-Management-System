@@ -25,8 +25,8 @@ export function onUnauthorized(handler: () => void) {
   return () => { unauthorizedHandler = null }
 }
 
-/** The only place that talks HTTP; attaches the bearer token to every request. */
-export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+/** The only place that talks HTTP: attaches the bearer token and turns every failure into an ApiError. */
+async function send(path: string, options: { method?: string; body?: unknown } = {}): Promise<Response> {
   let response: Response
   const headers: Record<string, string> = {}
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
@@ -40,20 +40,40 @@ export async function api<T>(path: string, options: { method?: string; body?: un
   } catch {
     throw new ApiError(0, { detail: 'Cannot reach the API. Is the Spring Boot backend running on port 8080?' })
   }
-  if (response.status === 204) return undefined as T
   if (response.status === 401 && authToken) {
     unauthorizedHandler?.()
     throw new ApiError(401, { detail: 'Your session has expired. Please sign in again.' })
   }
   if (response.status === 403) throw new ApiError(403, { detail: 'You do not have access to this record.' })
-  const data = await response.json().catch(() => ({}))
   if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
     // The Vite proxy answers 500 with an empty body when the backend is down.
     const problem: Problem = data && typeof data === 'object' && 'status' in data ? data
       : { detail: `Request failed (HTTP ${response.status}). Is the backend running?` }
     throw new ApiError(response.status, problem)
   }
-  return data as T
+  return response
+}
+
+/** JSON request/response. */
+export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+  const response = await send(path, options)
+  return response.status === 204 ? (undefined as T) : ((await response.json()) as T)
+}
+
+/**
+ * Downloads a protected file. A plain link can't send the bearer token, so the file is fetched with it and then
+ * handed to the browser's save dialog. The name comes from the server's Content-Disposition header.
+ */
+export async function downloadFile(path: string, fallbackName: string) {
+  const response = await send(path)
+  const name = /filename="?([^";]+)"?/.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 /** Query options for a GET. The URL path is the cache key; null skips. allow404 resolves "not found" to null. */

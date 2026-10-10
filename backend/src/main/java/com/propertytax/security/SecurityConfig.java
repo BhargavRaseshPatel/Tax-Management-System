@@ -71,7 +71,7 @@ public class SecurityConfig {
 					.requestMatchers(GET, "/api/tax-accounts/{id}", "/api/tax-accounts/{id}/bills",
 							"/api/tax-accounts/{id}/balance")
 						.access(staffOr(ownership::userOwnsAccount))
-					.requestMatchers(GET, "/api/tax-bills/{id}", "/api/tax-bills/{id}/payments")
+					.requestMatchers(GET, "/api/tax-bills/{id}", "/api/tax-bills/{id}/payments", "/api/tax-bills/{id}/document")
 						.access(staffOr(ownership::userOwnsBill))
 					.requestMatchers(GET, "/api/payments/{id}").access(staffOr(ownership::userOwnsPayment))
 					// Everything else: staff read; only tax officers change tax data

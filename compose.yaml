@@ -1,6 +1,6 @@
 # Local stack. Values come from .env (copy .env.example).
 #   Everything:      docker compose up -d --build --wait     → http://localhost:8088
-#   Database only:   docker compose up -d --wait postgres    (for ./mvnw spring-boot:run + npm run dev)
+#   Dev services:    docker compose up -d --wait postgres s3 (for ./mvnw spring-boot:run + npm run dev)
 services:
   postgres:
     image: postgres:17
@@ -17,6 +17,19 @@ services:
       interval: 5s
       retries: 10
 
+  # Local stand-in for Amazon S3 (no AWS account needed). Creates the bucket at startup. Objects live in the
+  # container and are lost on `docker compose down`; the backend then simply regenerates documents on demand.
+  s3:
+    image: adobe/s3mock:5.2.3
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${DOCUMENTS_BUCKET:-civictax-documents}
+    ports:
+      - "127.0.0.1:${S3_PORT:-9090}:9090" # host access for the non-Docker backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/ >/dev/null || exit 1"]
+      interval: 5s
+      retries: 10
+
   backend:
     build: ./backend
     environment:
@@ -27,8 +40,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_URL_PARAMS: "" # local container has no TLS; Aurora uses verify-full (see docs/deployment.md)
       DEV_AUTH: ${DEV_AUTH:-false} # local token issuer; this stack is for local use only
+      S3_ENDPOINT: http://s3:9090 # the emulator above; unset in AWS so the SDK talks to real S3
+      DOCUMENTS_BUCKET: ${DOCUMENTS_BUCKET:-civictax-documents}
     depends_on:
       postgres:
+        condition: service_healthy
+      s3:
         condition: service_healthy
     # Not published: reachable only through the web container's /api proxy.
 

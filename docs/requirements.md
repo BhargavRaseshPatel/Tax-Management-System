@@ -38,5 +38,6 @@ final = annual − interim; overpayments rejected (decided in Stage 5).
 | 7 React frontend | Done |
 | 8 Auth & RBAC | Done. Local dev JWT issuer stands in for Cognito (no AWS account yet) |
 | 9 Docker & local env | Done |
-| 10 Aurora PostgreSQL | Templates + TLS done and validated offline — awaiting approval. **Not deployed** (no AWS account yet) |
-| 11–19 | Not started |
+| 10 Aurora PostgreSQL | Templates + TLS done and validated offline. **Not deployed** (no AWS account yet) |
+| 11 S3 documents | Done locally against an S3 emulator — awaiting approval. Bucket template validated offline, not deployed |
+| 12–19 | Not started |

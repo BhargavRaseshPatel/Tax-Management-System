@@ -18,6 +18,10 @@
   only from the application security group, requires TLS (`rds.force_ssl=1`), and the app connects with
   `sslmode=verify-full`. The master password is generated and held by Secrets Manager; it is never typed or stored.
 - AWS credentials stay in `~/.aws` on the developer's machine: never in the repo, `.env`, CI logs, or chat.
+- Documents: the S3 bucket is never public and object keys/URLs are never sent to clients; downloads go through the
+  API (authorized, `no-store`). Keys contain no personal data. The app's IAM policy allows only Get/Put on its prefixes.
+- AWS access uses the task role (default credential chain). The only credentials in code are placeholders for the
+  local emulator, used solely when `S3_ENDPOINT` is set.
 - Least-privilege IAM per task role; encryption at rest with KMS; TLS everywhere in AWS.
 - Payments are simulated records only — no real card/bank data is ever accepted or stored.
 - Dependencies are scanned in CI (SAST, Stage 17).

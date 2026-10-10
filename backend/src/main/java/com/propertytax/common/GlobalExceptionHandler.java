@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import software.amazon.awssdk.core.exception.SdkException;
 
 /**
  * Inherited handlers cover validation (400), malformed JSON (400), ResponseStatusException, 405, etc.
@@ -41,6 +42,13 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		ex.getBody().setDetail("Validation failed");
 		ex.getBody().setProperty("errors", errors);
 		return handleExceptionInternal(ex, ex.getBody(), headers, status, request);
+	}
+
+	/** S3 (or any AWS call) failed: say so plainly, keep bucket names, keys and AWS error text out of the response. */
+	@ExceptionHandler(SdkException.class)
+	ProblemDetail awsUnavailable(SdkException ex) {
+		logger.error("AWS call failed", ex);
+		return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Document storage is temporarily unavailable");
 	}
 
 	@ExceptionHandler(PropertyReferenceException.class)

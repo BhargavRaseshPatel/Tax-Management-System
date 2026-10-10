@@ -10,6 +10,7 @@ import UndoIcon from '@mui/icons-material/Undo'
 import { useApi, useApiMutation } from '../../api/client'
 import type { AccountBalance, BillType, Page, Payment, PaymentMethod, Property, TaxAccount, TaxBill } from '../../api/types'
 import { PAYMENT_METHODS } from '../../api/types'
+import { BillPdfButton } from '../../components/BillPdfButton'
 import { CURRENT_YEAR, date, enumLabel, money, today } from '../../components/format'
 import { EmptyState, ErrorAlert, Mono, PageHeader, QueryState, SectionCard, StatusChip } from '../../components/ui'
 import { tokens } from '../../theme'
@@ -200,11 +201,12 @@ function BillRow({ bill }: { bill: TaxBill }) {
         </QueryState>
 
         {open && <RecordPayment bill={bill} />}
-        {bill.status !== 'CANCELLED' && (
-          <Stack direction="row" sx={{ justifyContent: 'flex-end', mt: 1 }}>
+        <Stack direction="row" sx={{ justifyContent: 'flex-end', alignItems: 'center', mt: 1 }}>
+          <BillPdfButton bill={bill} />
+          {bill.status !== 'CANCELLED' && (
             <Button size="small" color="error" disabled={action.isPending} onClick={() => action.mutate({ path: `/api/tax-bills/${bill.id}/cancel` })}>Cancel bill</Button>
-          </Stack>
-        )}
+          )}
+        </Stack>
         <ErrorAlert error={action.error} />
       </AccordionDetails>
     </Accordion>

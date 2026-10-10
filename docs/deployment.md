@@ -100,3 +100,45 @@ aws rds describe-db-cluster-snapshots --region ca-central-1 --snapshot-type manu
   --query "DBClusterSnapshots[].DBClusterSnapshotIdentifier" --output text
 aws rds delete-db-cluster-snapshot --region ca-central-1 --db-cluster-snapshot-identifier <name-from-above>
 ```
+
+---
+
+## Stage 11 — Amazon S3 document storage
+
+Locally nothing is needed: `compose.yaml` runs an S3 emulator (`adobe/s3mock`) and the backend talks to it because
+`S3_ENDPOINT` is set. In AWS, leave `S3_ENDPOINT` **unset** and the same code uses real S3.
+
+What `infra/storage.yaml` creates:
+
+| Resource | Why |
+|---|---|
+| Bucket `civictax-documents-<account>-<region>` | All four **Block Public Access** settings on, ACLs disabled, default encryption, versioning, old versions expire after 90 days |
+| Bucket policy | Denies any request not made over TLS |
+| IAM managed policy | `s3:GetObject` + `s3:PutObject` on `tax-bills/*` and `reports/*` only. No list, delete, or bucket administration. Attached to the ECS task role in Stage 14 |
+
+```bash
+# The template creates an IAM policy, so CloudFormation asks you to acknowledge that explicitly.
+aws cloudformation deploy --region ca-central-1 --stack-name civictax-storage \
+  --template-file infra/storage.yaml --capabilities CAPABILITY_IAM
+
+aws cloudformation describe-stacks --region ca-central-1 --stack-name civictax-storage \
+  --query "Stacks[0].Outputs[].[OutputKey,OutputValue]" --output table
+```
+
+Backend settings in AWS: `DOCUMENTS_BUCKET=<DocumentsBucketName output>`, `AWS_REGION=ca-central-1`, no
+`S3_ENDPOINT`, no access keys (the task role provides credentials).
+
+By hand in the console instead: **S3 → Create bucket** (region Canada Central; ACLs disabled; **Block all public
+access** on; versioning enabled; default encryption SSE-S3) → **Permissions → Bucket policy**: deny when
+`aws:SecureTransport` is false → **IAM → Policies → Create policy** with the two actions and two prefixes above.
+
+Cost: S3 storage and requests for a few small PDFs are fractions of a cent per month.
+
+Clean up (the bucket is kept on stack deletion, so empty and remove it yourself):
+```bash
+aws cloudformation delete-stack --region ca-central-1 --stack-name civictax-storage
+BUCKET=civictax-documents-$(aws sts get-caller-identity --query Account --output text)-ca-central-1
+aws s3api delete-objects --bucket "$BUCKET" --delete "$(aws s3api list-object-versions --bucket "$BUCKET" \
+  --query '{Objects: [Versions,DeleteMarkers][][].{Key:Key,VersionId:VersionId}}' --output json)"   # skip if the bucket is empty
+aws s3api delete-bucket --bucket "$BUCKET" --region ca-central-1
+```

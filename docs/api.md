@@ -10,7 +10,7 @@ Locally get a token from `POST /api/dev/token {"email": "..."}` (only when `DEV_
 |---|---|
 | Anyone | `GET /actuator/health`, API docs; `GET /api/dev/users`, `POST /api/dev/token` (local only) |
 | Any signed-in user | `GET /api/me` (incl. `ownerId`), `GET /api/tax-rates` |
-| RESIDENT | `GET` single records tied to a property they own: owner, property (+owners, assessments, tax-account), assessment, tax account (+bills, balance), bill (+payments), payment. Anything else → 403 (unknown ids too, so existence never leaks) |
+| RESIDENT | `GET` single records tied to a property they own: owner, property (+owners, assessments, tax-account), assessment, tax account (+bills, balance), bill (+payments, document), payment. Anything else → 403 (unknown ids too, so existence never leaks) |
 | TAX_OFFICER | read everything; create/change all tax data; read users (to link owners) |
 | ADMIN | create/change users; read-only on tax data |
 
@@ -46,4 +46,5 @@ Payments are recorded as the authenticated officer (no recorder in the request b
 | 5 | `POST/GET /api/tax-accounts`, `GET /api/tax-accounts/{id}`, `GET /api/properties/{id}/tax-account` | one per property; number `TA-<propertyId>` |
 | 6 | `POST/GET /api/tax-accounts/{id}/bills`, `GET /api/tax-bills/{id}`, `POST /api/tax-bills/{id}/cancel` | amount calculated server-side; see [business-flow.md](business-flow.md) |
 | 6 | `GET /api/tax-accounts/{id}/balance` | live bills − recorded payments |
+| 6 | `GET /api/tax-bills/{id}/document` | the bill as `application/pdf` (attachment, `no-store`); generated and stored in S3 on first request; staff or owning resident; 503 if storage is down |
 | 7 | `POST/GET /api/tax-bills/{id}/payments`, `GET /api/payments/{id}`, `POST /api/payments/{id}/reverse` | simulated; ≤ outstanding; unique reference |

@@ -1,6 +1,7 @@
 package com.propertytax.taxbill;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 
 import com.propertytax.assessment.Assessment;
@@ -53,6 +54,11 @@ public class TaxBill extends BaseEntity {
 	@Enumerated(EnumType.STRING)
 	private Status status = Status.ISSUED;
 
+	/** Object-storage key of the generated PDF; null until first generated. Never exposed to clients. */
+	private String documentKey;
+	private Long documentSizeBytes;
+	private Instant documentGeneratedAt;
+
 	protected TaxBill() {}
 
 	public TaxBill(String billNumber, TaxAccount taxAccount, Assessment assessment, TaxRate taxRate, int taxYear,
@@ -83,6 +89,12 @@ public class TaxBill extends BaseEntity {
 		status = Status.CANCELLED;
 	}
 
+	public void attachDocument(String key, long sizeBytes, Instant generatedAt) {
+		this.documentKey = key;
+		this.documentSizeBytes = sizeBytes;
+		this.documentGeneratedAt = generatedAt;
+	}
+
 	public String getBillNumber() { return billNumber; }
 	public TaxAccount getTaxAccount() { return taxAccount; }
 	public Assessment getAssessment() { return assessment; }
@@ -93,5 +105,8 @@ public class TaxBill extends BaseEntity {
 	public LocalDate getIssueDate() { return issueDate; }
 	public LocalDate getDueDate() { return dueDate; }
 	public Status getStatus() { return status; }
+	public String getDocumentKey() { return documentKey; }
+	public Long getDocumentSizeBytes() { return documentSizeBytes; }
+	public Instant getDocumentGeneratedAt() { return documentGeneratedAt; }
 
 }
