@@ -1,14 +1,11 @@
 package com.propertytax.document;
 
-import java.net.URI;
 import java.util.Optional;
 
+import com.propertytax.common.AwsClients;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
@@ -26,17 +23,12 @@ public class DocumentStore {
 	private final S3Client s3;
 	private final String bucket;
 
-	DocumentStore(@Value("${app.documents.bucket}") String bucket, @Value("${app.documents.region}") String region,
+	DocumentStore(@Value("${app.documents.bucket}") String bucket, @Value("${app.aws-region}") String region,
 			@Value("${app.documents.endpoint:}") String endpoint) {
 		this.bucket = bucket;
-		var builder = S3Client.builder().region(Region.of(region));
-		if (!endpoint.isBlank()) {
-			// Local emulator only: it needs path-style URLs and accepts any credentials, so these are placeholders,
-			// not secrets. Real AWS credentials are never configured in code.
-			builder.endpointOverride(URI.create(endpoint)).forcePathStyle(true)
-					.credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("local", "local")));
-		}
-		this.s3 = builder.build();
+		this.s3 = AwsClients.configure(S3Client.builder(), region, endpoint)
+				.forcePathStyle(!endpoint.isBlank()) // the emulator has no per-bucket hostnames
+				.build();
 	}
 
 	public void put(String key, byte[] content, String contentType) {

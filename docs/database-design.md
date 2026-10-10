@@ -107,6 +107,10 @@ Tax rate is looked up by `(tax_year, property_class)` — one rate per class per
 A check constraint keeps the three all-null or all-set. The PDF is derived entirely from database rows, so S3 is
 never the only copy: if the object is missing, the next download rebuilds it.
 
+## Not in PostgreSQL
+Asynchronous report-job state lives in the DynamoDB table `report_jobs` (see aws-architecture.md). It is bookkeeping,
+not business data: nothing here references it and it can be lost without affecting any tax record.
+
 ## Deliberately not in the schema
 - No `tax_adjustments` (out of scope by requirement). No ownership history dates (simulated ownership).
 - Ownership percentages summing to 100 and payment ≤ remaining balance are service-layer rules (Stage 5) — they span rows.

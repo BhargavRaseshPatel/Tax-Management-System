@@ -27,10 +27,21 @@ class TestcontainersConfiguration {
 				.waitingFor(Wait.forHttp("/").forPort(9090));
 	}
 
+	/** Amazon's DynamoDB Local (same image as compose.yaml) for the report_jobs table. */
 	@Bean
-	DynamicPropertyRegistrar s3Endpoint(GenericContainer<?> s3Container) {
-		return registry -> registry.add("app.documents.endpoint",
-				() -> "http://" + s3Container.getHost() + ":" + s3Container.getMappedPort(9090));
+	GenericContainer<?> dynamoContainer() {
+		return new GenericContainer<>(DockerImageName.parse("amazon/dynamodb-local:3.3.1"))
+				.withExposedPorts(8000)
+				.withCommand("-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory")
+				.waitingFor(Wait.forListeningPort());
+	}
+
+	@Bean
+	DynamicPropertyRegistrar emulatorEndpoints(GenericContainer<?> s3Container, GenericContainer<?> dynamoContainer) {
+		return registry -> {
+			registry.add("app.documents.endpoint", () -> "http://" + s3Container.getHost() + ":" + s3Container.getMappedPort(9090));
+			registry.add("app.reports.endpoint", () -> "http://" + dynamoContainer.getHost() + ":" + dynamoContainer.getMappedPort(8000));
+		};
 	}
 
 }

@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CivicTax demo - DynamoDB table report_jobs (state of asynchronous report jobs only; all business data stays in
+  PostgreSQL) and the least-privilege IAM policy for the application and report worker.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: civictax
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  DeletionProtection:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+
+Resources:
+  # Keys and index must match ReportJobStore.createTableInEmulator() in the backend.
+  ReportJobsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete # job bookkeeping, rebuilt by simply requesting the report again
+    UpdateReplacePolicy: Delete
+    Properties:
+      TableName: report_jobs
+      BillingMode: PAY_PER_REQUEST # no capacity to manage; an idle demo costs nothing
+      AttributeDefinitions:
+        - { AttributeName: jobId, AttributeType: S }
+        - { AttributeName: requestedBy, AttributeType: N }
+        - { AttributeName: requestedAt, AttributeType: S }
+      KeySchema:
+        - { AttributeName: jobId, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: byRequester # "my jobs, newest first" without a table scan
+          KeySchema:
+            - { AttributeName: requestedBy, KeyType: HASH }
+            - { AttributeName: requestedAt, KeyType: RANGE }
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAt # jobs delete themselves 90 days after being requested
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      DeletionProtectionEnabled: !Ref DeletionProtection
+      # Encrypted at rest by default with an AWS-owned key; Stage 16 switches to a customer-managed KMS key.
+
+  # The four operations the code performs, on this table and its index only. No Scan, no DeleteItem, no table admin.
+  ReportJobsAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: CivicTax application and report worker - read/write report job state
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ReadWriteReportJobs
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:Query
+            Resource:
+              - !GetAtt ReportJobsTable.Arn
+              - !Sub '${ReportJobsTable.Arn}/index/byRequester'
+
+Outputs:
+  ReportJobsTableName:
+    Description: REPORT_JOBS_TABLE for the backend
+    Value: !Ref ReportJobsTable
+    Export: { Name: !Sub '${ProjectName}-ReportJobsTableName' }
+  ReportJobsAccessPolicyArn:
+    Value: !Ref ReportJobsAccessPolicy
+    Export: { Name: !Sub '${ProjectName}-ReportJobsAccessPolicyArn' }

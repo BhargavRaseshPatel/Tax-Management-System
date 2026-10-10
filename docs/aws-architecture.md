@@ -21,7 +21,8 @@ flowchart LR
   api --> sm[Secrets Manager<br/>DB credentials ✔]
   api --> s3[(S3 documents · storage.yaml ✔)]
   worker --> s3
-  worker --> ddb[(DynamoDB report_jobs · Stage 12)]
+  api --> ddb[(DynamoDB report_jobs · report-jobs.yaml ✔)]
+  worker --> ddb
   sfn[Step Functions · Stage 13] --> worker
 ```
 
@@ -46,6 +47,16 @@ flowchart LR
 - **Metadata** (key, size, generated time) lives in PostgreSQL on `tax_bills`; keys contain no personal data.
 - **Local:** the `adobe/s3mock` emulator in Docker Compose and in tests. (LocalStack now requires a paid/registered
   token, so each AWS service gets its own small emulator instead.)
+
+## Report job state (Stage 12)
+- **One DynamoDB table, `report_jobs`**, holding only the state of asynchronous report jobs. Properties, assessments,
+  bills and payments stay relational in PostgreSQL. Job state suits DynamoDB: single-item lookups by id, no joins,
+  bursty writes from workers, and automatic expiry.
+- **Access patterns:** get by `jobId`; a user's jobs newest-first via the `byRequester` index (Query, never Scan).
+- **Correctness under retries:** every status change is a conditional write that succeeds only from the expected
+  current status, so two workers can't claim one job and a finished job can't be reopened.
+- **Housekeeping and safety:** TTL removes jobs after 90 days; on-demand billing; point-in-time recovery; encrypted
+  at rest. The IAM policy allows only GetItem, PutItem, UpdateItem and Query on the table and its index.
 
 ## Deliberate simplifications (demo cost) and their upgrade path
 | Simplification | Production upgrade |

@@ -23,11 +23,14 @@ app:
   # LOCAL ONLY: in-process token issuer standing in for Amazon Cognito (see DevTokenIssuer). Never true when deployed;
   # deployed environments set SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI to the Cognito user pool instead.
   dev-auth: ${DEV_AUTH:false}
+  aws-region: ${AWS_REGION:ca-central-1}
+  # Endpoints are empty in AWS (real services, credentials from the task role). Locally they point at emulators.
   documents:
     bucket: ${DOCUMENTS_BUCKET:civictax-documents}
-    region: ${AWS_REGION:ca-central-1}
-    # Empty = real Amazon S3 with the task role's credentials. Locally: the S3 emulator, e.g. http://localhost:9090
-    endpoint: ${S3_ENDPOINT:}
+    endpoint: ${S3_ENDPOINT:} # e.g. http://localhost:9090
+  reports:
+    table: ${REPORT_JOBS_TABLE:report_jobs}
+    endpoint: ${DYNAMODB_ENDPOINT:} # e.g. http://localhost:8000
 
 springdoc:
   swagger-ui:

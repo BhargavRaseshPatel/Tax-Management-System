@@ -142,3 +142,34 @@ aws s3api delete-objects --bucket "$BUCKET" --delete "$(aws s3api list-object-ve
   --query '{Objects: [Versions,DeleteMarkers][][].{Key:Key,VersionId:VersionId}}' --output json)"   # skip if the bucket is empty
 aws s3api delete-bucket --bucket "$BUCKET" --region ca-central-1
 ```
+
+---
+
+## Stage 12 — DynamoDB `report_jobs`
+
+Locally: `compose.yaml` runs Amazon's DynamoDB Local and the backend creates the table on startup
+(`DYNAMODB_ENDPOINT` set). In AWS leave `DYNAMODB_ENDPOINT` **unset**; the table comes from the template.
+
+| Item attribute | Type | Meaning |
+|---|---|---|
+| `jobId` (partition key) | S | UUID returned to the requester |
+| `jobType` | S | `TAX_ROLL_SUMMARY`, `OUTSTANDING_BALANCES`, `PAYMENTS_RECONCILIATION` |
+| `status` | S | `QUEUED → PROCESSING → COMPLETED`, or `FAILED`; changed only by conditional writes |
+| `requestedBy`, `requestedAt` | N, S | `users.id` and ISO time; also the keys of index `byRequester` |
+| `taxYear` | N | report parameter |
+| `updatedAt`, `completedAt` | S | timestamps |
+| `outputKey` | S | S3 key of the finished report |
+| `errorMessage` | S | why it failed (max 500 characters) |
+| `expiresAt` | N | TTL: DynamoDB deletes the item 90 days after the request |
+
+```bash
+aws cloudformation deploy --region ca-central-1 --stack-name civictax-report-jobs \
+  --template-file infra/report-jobs.yaml --capabilities CAPABILITY_IAM
+```
+By hand in the console instead: **DynamoDB → Create table**: name `report_jobs`, partition key `jobId` (String),
+on-demand capacity → **Indexes → Create index** `byRequester` (partition `requestedBy` Number, sort `requestedAt`
+String) → **Additional settings → Time to Live** on `expiresAt` → **Backups → Point-in-time recovery** on.
+
+Cost: on-demand billing, so an idle table costs nothing; a demo's worth of requests is well under a cent.
+
+Clean up: `aws cloudformation delete-stack --region ca-central-1 --stack-name civictax-report-jobs` (deletes the table).

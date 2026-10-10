@@ -10,7 +10,7 @@ Java 21+ and Docker (running). Maven is not needed — use the wrapper `./mvnw`.
 ## Run everything with Docker (one command)
 ```bash
 cp .env.example .env              # then set DB_PASSWORD
-docker compose up -d --build --wait      # PostgreSQL + S3 emulator + backend + frontend → http://localhost:8088
+docker compose up -d --build --wait      # PostgreSQL + AWS emulators + backend + frontend → http://localhost:8088
 API=http://localhost:8088 scripts/seed-demo-data.sh   # first run only: fictional demo data
 ```
 The web container (nginx) serves the React build and proxies `/api` to the backend, which is not published to the
@@ -20,7 +20,7 @@ host. Logs: `docker compose logs -f backend`. Stop: `docker compose stop`. Delet
 ## Run the backend (development)
 ```bash
 cp .env.example .env              # then set DB_PASSWORD (DEV_AUTH=true enables local sign-in)
-docker compose up -d --wait postgres s3   # database (localhost:5433) + S3 emulator (localhost:9090)
+docker compose up -d --wait postgres s3 dynamodb   # database :5433, S3 emulator :9090, DynamoDB emulator :8000
 cd backend && ./mvnw spring-boot:run   # reads ../.env itself; no exports needed
 ```
 - Health: `curl localhost:8080/actuator/health` → `{"status":"UP"}` (Flyway migrates on startup)
@@ -35,7 +35,7 @@ cd frontend && npm install && npm run dev      # http://localhost:5173 (proxies 
 ```
 Load fictional demo data once, into a **fresh** database (it goes through the API, so all business rules apply):
 ```bash
-docker compose down -v && docker compose up -d --wait postgres s3   # reset local DB, then (re)start the backend
+docker compose down -v && docker compose up -d --wait postgres s3 dynamodb   # reset, then (re)start the backend
 scripts/seed-demo-data.sh                               # needs curl + jq; signs in via the dev issuer
 ```
 Sign in as **Elena Rostova** (resident), **Marcus Vance** (tax officer) or **Sarah Chen** (admin), or switch with
@@ -66,6 +66,7 @@ Tests start their own throwaway PostgreSQL 17 via Testcontainers; they never tou
 | API (MockMvc) | `ApiIntegrationTest`, `BillingWorkflowIntegrationTest` | every endpoint, status codes, ProblemDetail bodies, full billing workflow |
 | Transactions | `TransactionIntegrationTest` | rollback after a mid-transaction failure; row locks under concurrent requests |
 | Documents | `DocumentIntegrationTest`, `TaxBillDocumentServiceTest` | PDF content; stored in S3 (emulator) with key/size/time in PostgreSQL; reuse and self-heal; only staff and the owner can download |
+| Report jobs | `ReportJobStoreIntegrationTest` | DynamoDB `report_jobs`: every field round-trips, status changes only in order, per-requester listing |
 | Security | `SecurityIntegrationTest` | 401 for missing/forged/garbage/deactivated tokens; role boundaries; residents only see their own records |
 
 Run one class: `./mvnw test -Dtest=TransactionIntegrationTest`.
