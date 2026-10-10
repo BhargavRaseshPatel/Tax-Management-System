@@ -71,6 +71,15 @@
 			<artifactId>dynamodb</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>sfn</artifactId>
+		</dependency>
+		<!-- Named explicitly (it is already the SDK's default HTTP client) to raise the read timeout for long polling. -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>apache5-client</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>com.github.librepdf</groupId>
 			<artifactId>openpdf</artifactId>
 			<version>3.0.5</version>

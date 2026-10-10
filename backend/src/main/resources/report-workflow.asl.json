@@ -1,0 +1,45 @@
+{
+  "Comment": "CivicTax report generation. LOCAL EMULATOR COPY: infra/report-workflow.yaml holds the deployed definition; keep the two in step.",
+  "StartAt": "GenerateReport",
+  "States": {
+    "GenerateReport": {
+      "Type": "Task",
+      "Resource": "${ActivityArn}",
+      "TimeoutSeconds": 300,
+      "Retry": [
+        {
+          "ErrorEquals": ["ReportGenerationFailed", "States.Timeout"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "MarkJobFailed" }],
+      "ResultPath": "$.result",
+      "Next": "Done"
+    },
+    "MarkJobFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${TableName}",
+        "Key": { "jobId": { "S.$": "$.jobId" } },
+        "UpdateExpression": "SET #status = :failed, errorMessage = :message, updatedAt = :now, completedAt = :now",
+        "ConditionExpression": "#status IN (:queued, :processing)",
+        "ExpressionAttributeNames": { "#status": "status" },
+        "ExpressionAttributeValues": {
+          ":failed": { "S": "FAILED" },
+          ":queued": { "S": "QUEUED" },
+          ":processing": { "S": "PROCESSING" },
+          ":message": { "S.$": "$.error.Cause" },
+          ":now": { "S.$": "$$.State.EnteredTime" }
+        }
+      },
+      "ResultPath": null,
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": null, "Next": "Failed" }],
+      "Next": "Failed"
+    },
+    "Failed": { "Type": "Fail", "Error": "ReportFailed", "Cause": "Report generation failed after retries" },
+    "Done": { "Type": "Succeed" }
+  }
+}

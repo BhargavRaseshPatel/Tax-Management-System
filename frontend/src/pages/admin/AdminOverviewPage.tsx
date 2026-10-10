@@ -23,13 +23,13 @@ const SCHEMA = [
 ] as const
 
 const INTEGRATIONS = [
-  { name: 'Spring Boot REST API', detail: 'Validation, ProblemDetail errors, OpenAPI', stage: 'Live', live: true },
-  { name: 'PostgreSQL 17 + Flyway', detail: 'Nine-table relational schema', stage: 'Live', live: true },
-  { name: 'Amazon Cognito + JWT', detail: 'Sign-in, roles, resident data ownership', stage: 'Stage 8' },
-  { name: 'Aurora PostgreSQL', detail: 'Production database', stage: 'Stage 10' },
-  { name: 'Amazon S3', detail: 'Tax-bill PDFs and report output', stage: 'Stage 11' },
-  { name: 'DynamoDB report_jobs', detail: 'Async report job state', stage: 'Stage 12' },
-  { name: 'Step Functions + Fargate', detail: 'Report generation workers', stage: 'Stages 13–14' },
+  { name: 'Spring Boot REST API', detail: 'Validation, ProblemDetail errors, OpenAPI, JWT security', stage: 'Running', live: true },
+  { name: 'PostgreSQL 17 + Flyway', detail: 'Nine-table relational schema', stage: 'Running', live: true },
+  { name: 'Amazon S3', detail: 'Tax-bill PDFs and report files', stage: 'Running (local emulator)', live: true },
+  { name: 'DynamoDB report_jobs', detail: 'Asynchronous report job state', stage: 'Running (local emulator)', live: true },
+  { name: 'Step Functions + report worker', detail: 'Orchestration, retries, failure handling', stage: 'Running (local emulator)', live: true },
+  { name: 'Amazon Cognito', detail: 'Hosted sign-in; a local token issuer stands in for it', stage: 'Config switch' },
+  { name: 'Aurora PostgreSQL, ECS Fargate, ALB, CloudFront', detail: 'AWS deployment', stage: 'Templates / later stages' },
 ]
 
 export function AdminOverviewPage() {
@@ -51,7 +51,7 @@ export function AdminOverviewPage() {
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}><StatCard label="API status" value={health.isPending ? '…' : up ? 'UP' : 'DOWN'} tone={up || health.isPending ? 'default' : 'danger'} hint="Spring Boot Actuator /health" icon={<DnsOutlinedIcon fontSize="small" />} /></Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}><StatCard label="User accounts" value={count(counts.users)} hint="Residents, officers, admins" icon={<ManageAccountsOutlinedIcon fontSize="small" />} /></Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}><StatCard label="Properties on roll" value={count(counts.properties)} hint={`${count(counts.accounts)} tax accounts`} icon={<HomeWorkOutlinedIcon fontSize="small" />} /></Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><StatCard label="Cloud services" value="2 / 7" hint="Integrations live; rest scheduled" icon={<CloudOutlinedIcon fontSize="small" />} /></Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><StatCard label="Cloud services" value="5 / 7" hint="Running locally; AWS deployment pending" icon={<CloudOutlinedIcon fontSize="small" />} /></Grid>
       </Grid>
 
       <Stack spacing={2.5}>

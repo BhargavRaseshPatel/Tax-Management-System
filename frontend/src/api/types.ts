@@ -114,6 +114,23 @@ export interface Payment extends Audited {
   recordedById: number
 }
 
+export type ReportType = 'TAX_ROLL_SUMMARY' | 'OUTSTANDING_BALANCES' | 'PAYMENTS_RECONCILIATION'
+export const REPORT_TYPES: ReportType[] = ['TAX_ROLL_SUMMARY', 'OUTSTANDING_BALANCES', 'PAYMENTS_RECONCILIATION']
+
+/** An asynchronous report job (state kept in DynamoDB). */
+export interface ReportJob {
+  jobId: string
+  type: ReportType
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  taxYear: number
+  requestedBy: number
+  requestedAt: string
+  updatedAt: string
+  completedAt: string | null
+  errorMessage: string | null
+  downloadable: boolean
+}
+
 /** Who is signed in (from /api/dev/token locally; /api/me works with any token). */
 export interface SessionUser {
   id: number

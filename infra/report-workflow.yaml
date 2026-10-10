@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CivicTax demo - Step Functions workflow for asynchronous reports: one activity task performed by the report
+  worker (an ECS service, Stage 14) with timeout, retries, and a final step that marks the job FAILED in DynamoDB.
+  Deploy report-jobs.yaml first.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: civictax
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+
+Resources:
+  # Workers long-poll this activity for tasks; Step Functions gives each task to exactly one worker.
+  ReportActivity:
+    Type: AWS::StepFunctions::Activity
+    Properties:
+      Name: !Sub '${ProjectName}-report-worker'
+
+  # What the state machine itself may do: only update items in report_jobs (its "mark FAILED" step).
+  StateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: states.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: { 'aws:SourceAccount': !Ref 'AWS::AccountId' }
+      Policies:
+        - PolicyName: mark-report-job-failed
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource: !Sub
+                  - 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}'
+                  - TableName: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportJobsTableName' }
+
+  # Must match backend/src/main/resources/report-workflow.asl.json (the copy the local emulator runs).
+  ReportStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub '${ProjectName}-report'
+      StateMachineType: STANDARD
+      RoleArn: !GetAtt StateMachineRole.Arn
+      DefinitionSubstitutions:
+        ActivityArn: !Ref ReportActivity
+        TableName: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportJobsTableName' }
+      Definition:
+        Comment: CivicTax report generation
+        StartAt: GenerateReport
+        States:
+          GenerateReport:
+            Type: Task
+            Resource: '${ActivityArn}'
+            TimeoutSeconds: 300
+            Retry:
+              - ErrorEquals: [ReportGenerationFailed, States.Timeout]
+                IntervalSeconds: 2
+                MaxAttempts: 2
+                BackoffRate: 2.0
+            Catch:
+              - ErrorEquals: [States.ALL]
+                ResultPath: $.error
+                Next: MarkJobFailed
+            ResultPath: $.result
+            Next: Done
+          MarkJobFailed:
+            Type: Task
+            Resource: arn:aws:states:::dynamodb:updateItem
+            Parameters:
+              TableName: '${TableName}'
+              Key:
+                jobId: { 'S.$': $.jobId }
+              UpdateExpression: 'SET #status = :failed, errorMessage = :message, updatedAt = :now, completedAt = :now'
+              ConditionExpression: '#status IN (:queued, :processing)'
+              ExpressionAttributeNames: { '#status': status }
+              ExpressionAttributeValues:
+                ':failed': { S: FAILED }
+                ':queued': { S: QUEUED }
+                ':processing': { S: PROCESSING }
+                ':message': { 'S.$': $.error.Cause }
+                ':now': { 'S.$': $$.State.EnteredTime }
+            ResultPath: null
+            Catch:
+              - ErrorEquals: [States.ALL]
+                ResultPath: null
+                Next: Failed
+            Next: Failed
+          Failed:
+            Type: Fail
+            Error: ReportFailed
+            Cause: Report generation failed after retries
+          Done:
+            Type: Succeed
+
+  # API task role: may start an execution of this one state machine, nothing else.
+  ReportRequesterPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: CivicTax API - start report workflow executions
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: states:StartExecution
+            Resource: !Ref ReportStateMachine
+
+  # Worker task role: may take tasks from this one activity and report their outcome.
+  ReportWorkerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: CivicTax report worker - receive report tasks and report results
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: states:GetActivityTask
+            Resource: !Ref ReportActivity
+          - Sid: TaskTokenActionsHaveNoResourceLevelPermissions
+            Effect: Allow
+            Action:
+              - states:SendTaskSuccess
+              - states:SendTaskFailure
+              - states:SendTaskHeartbeat
+            Resource: '*' # IAM limitation: these are authorised by possession of the task token
+
+Outputs:
+  ReportStateMachineArn:
+    Description: REPORT_STATE_MACHINE_ARN for the API and worker
+    Value: !Ref ReportStateMachine
+    Export: { Name: !Sub '${ProjectName}-ReportStateMachineArn' }
+  ReportActivityArn:
+    Description: REPORT_ACTIVITY_ARN for the API and worker
+    Value: !Ref ReportActivity
+    Export: { Name: !Sub '${ProjectName}-ReportActivityArn' }
+  ReportRequesterPolicyArn:
+    Value: !Ref ReportRequesterPolicy
+    Export: { Name: !Sub '${ProjectName}-ReportRequesterPolicyArn' }
+  ReportWorkerPolicyArn:
+    Value: !Ref ReportWorkerPolicy
+    Export: { Name: !Sub '${ProjectName}-ReportWorkerPolicyArn' }

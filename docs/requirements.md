@@ -40,5 +40,6 @@ final = annual − interim; overpayments rejected (decided in Stage 5).
 | 9 Docker & local env | Done |
 | 10 Aurora PostgreSQL | Templates + TLS done and validated offline. **Not deployed** (no AWS account yet) |
 | 11 S3 documents | Done locally against an S3 emulator. Bucket template validated offline, not deployed |
-| 12 DynamoDB report_jobs | Table + store done against DynamoDB Local — awaiting approval. Used by the API/worker in Stage 13. Template not deployed |
-| 13–19 | Not started |
+| 12 DynamoDB report_jobs | Table + store done against DynamoDB Local. Template not deployed |
+| 13 Async reports | Done end to end against local emulators (Step Functions, worker, S3, DynamoDB) — awaiting approval. Template not deployed |
+| 14–19 | Not started |

@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react'
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Stack,
-  Tooltip, Typography,
+  Typography,
 } from '@mui/material'
-import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined'
 import { ApiError } from '../api/client'
 import { tokens } from '../theme'
 import { enumLabel } from './format'
@@ -52,6 +51,7 @@ const STATUS_COLORS: Record<string, [string, string]> = {
   CLOSED: [tokens.muted, '#eef0f3'],
   REVERSED: [tokens.danger, tokens.dangerBg],
   SUSPENDED: [tokens.danger, tokens.dangerBg],
+  QUEUED: [tokens.warn, tokens.warnBg],
   COMPLETED: [tokens.teal, tokens.mint],
   PROCESSING: ['#1d4ed8', '#e0eaff'],
   FAILED: [tokens.danger, tokens.dangerBg],
@@ -109,15 +109,6 @@ export function ErrorAlert({ error }: { error: unknown }) {
 
 export function Mono(props: { children: ReactNode; sx?: object }) {
   return <Box component="span" sx={{ fontFamily: tokens.mono, fontSize: '0.85em', whiteSpace: 'nowrap', ...props.sx }}>{props.children}</Box>
-}
-
-/** Marks sections showing static demo data because their backend arrives in a later stage. */
-export function MockBadge({ stage }: { stage: string }) {
-  return (
-    <Tooltip title={`Static demo data. Real data arrives in ${stage}.`}>
-      <Chip icon={<ScienceOutlinedIcon />} label="Mock data" size="small" variant="outlined" sx={{ color: tokens.warn, borderColor: tokens.warn }} />
-    </Tooltip>
-  )
 }
 
 export function EmptyState({ children }: { children: ReactNode }) {

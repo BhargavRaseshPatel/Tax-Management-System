@@ -31,6 +31,13 @@ app:
   reports:
     table: ${REPORT_JOBS_TABLE:report_jobs}
     endpoint: ${DYNAMODB_ENDPOINT:} # e.g. http://localhost:8000
+    # true only in the report worker (a separate container/ECS service running this same image)
+    worker-enabled: ${REPORT_WORKER_ENABLED:false}
+    workflow:
+      endpoint: ${STEP_FUNCTIONS_ENDPOINT:} # e.g. http://localhost:8083
+      # From infra/report-workflow.yaml when deployed. With the local emulator both are created on startup.
+      state-machine-arn: ${REPORT_STATE_MACHINE_ARN:}
+      activity-arn: ${REPORT_ACTIVITY_ARN:}
 
 springdoc:
   swagger-ui:

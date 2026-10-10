@@ -1,69 +1,113 @@
 import { useState } from 'react'
-import { Alert, Box, Button, Grid, LinearProgress, MenuItem, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material'
+import { useQuery } from '@tanstack/react-query'
+import {
+  Box, Button, CircularProgress, Grid, IconButton, LinearProgress, MenuItem, Stack, Table, TableBody, TableCell,
+  TableHead, TableRow, TextField, Tooltip, Typography,
+} from '@mui/material'
+import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined'
 import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined'
-import { CURRENT_YEAR } from '../../components/format'
-import { Mono, MockBadge, PageHeader, SectionCard, StatusChip } from '../../components/ui'
+import { apiQuery, downloadFile, useApiMutation } from '../../api/client'
+import type { ReportJob, ReportType } from '../../api/types'
+import { REPORT_TYPES } from '../../api/types'
+import { CURRENT_YEAR, enumLabel } from '../../components/format'
+import { EmptyState, ErrorAlert, Mono, PageHeader, QueryState, SectionCard, StatusChip } from '../../components/ui'
 import { tokens } from '../../theme'
 
-/** Static examples shaped like the planned DynamoDB `report_jobs` items (Stage 12). */
-const MOCK_JOBS = [
-  { id: 'rpt-9a1f', type: 'Tax roll summary', year: 2026, status: 'COMPLETED', progress: 100, dispatched: '2026-10-08 11:30', s3Key: 'reports/2026/tax-roll-9a1f.pdf' },
-  { id: 'rpt-88b2', type: 'Outstanding balances', year: 2026, status: 'PROCESSING', progress: 68, dispatched: '2026-10-09 09:05', s3Key: null },
-  { id: 'rpt-77c4', type: 'Payments reconciliation', year: 2025, status: 'COMPLETED', progress: 100, dispatched: '2026-10-07 16:15', s3Key: 'reports/2025/payments-77c4.csv' },
-  { id: 'rpt-43b9', type: 'Assessment changes', year: 2026, status: 'FAILED', progress: 40, dispatched: '2026-10-07 08:05', s3Key: null, error: 'Worker timeout after 120 s (simulated)' },
-] as const
+const isActive = (job: ReportJob) => job.status === 'QUEUED' || job.status === 'PROCESSING'
 
+/**
+ * Asynchronous reports: the request returns a job at once; a background worker builds the CSV, stores it in S3
+ * and updates the job in DynamoDB. The list refreshes every 2 s while any job is still running.
+ */
 export function ReportsPage() {
-  const [type, setType] = useState('Tax roll summary')
+  const [type, setType] = useState<ReportType>('TAX_ROLL_SUMMARY')
+  const [taxYear, setTaxYear] = useState(String(CURRENT_YEAR))
+  const request = useApiMutation<ReportJob>()
+  const jobs = useQuery({
+    ...apiQuery<ReportJob[]>('/api/reports'),
+    refetchInterval: (query) => (query.state.data?.some(isActive) ? 2000 : false),
+  })
+
   return (
     <>
       <PageHeader eyebrow="Reporting" title="Reports & audits"
-        subtitle="Asynchronous report generation: request → job ID → worker builds the file → uploaded to S3 → job status updated."
-        actions={<MockBadge stage="Stages 11–13 (S3, DynamoDB, Step Functions)" />} />
-
-      <Alert severity="info" sx={{ mb: 2.5 }}>
-        Report jobs are not wired yet. This page shows the planned workflow with static example jobs, so the UI is ready when the backend lands.
-      </Alert>
+        subtitle="Reports are generated in the background: request → job ID → worker builds the file → stored in S3 → job status updated in DynamoDB. Step Functions retries a failed attempt twice before marking the job failed." />
 
       <Grid container spacing={2.5}>
         <Grid size={{ xs: 12, lg: 4 }}>
-          <SectionCard title="Request a report" subtitle="Creates a job and returns its ID immediately">
-            <Stack spacing={2}>
-              <TextField select label="Report" value={type} onChange={(e) => setType(e.target.value)}>
-                {['Tax roll summary', 'Outstanding balances', 'Payments reconciliation', 'Assessment changes'].map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+          <SectionCard title="Request a report" subtitle="Returns immediately with a job ID">
+            <Stack component="form" spacing={2}
+              onSubmit={(e) => { e.preventDefault(); request.mutate({ path: '/api/reports', body: { type, taxYear: Number(taxYear) } }) }}>
+              <TextField select label="Report" value={type} onChange={(e) => setType(e.target.value as ReportType)}>
+                {REPORT_TYPES.map((t) => <MenuItem key={t} value={t}>{enumLabel(t)}</MenuItem>)}
               </TextField>
-              <TextField label="Tax year" type="number" defaultValue={CURRENT_YEAR} />
-              <Tooltip title="Enabled in Stage 13">
-                <span><Button fullWidth variant="contained" startIcon={<RocketLaunchOutlinedIcon />} disabled>Dispatch report job</Button></span>
-              </Tooltip>
+              <TextField label="Tax year" type="number" value={taxYear} onChange={(e) => setTaxYear(e.target.value)} required
+                slotProps={{ htmlInput: { min: 2000, max: 2100 } }} />
+              <Button type="submit" variant="contained" startIcon={<RocketLaunchOutlinedIcon />} disabled={request.isPending}>
+                {request.isPending ? 'Requesting…' : 'Request report'}
+              </Button>
+              <ErrorAlert error={request.error} />
+              {request.isSuccess && (
+                <Typography variant="body2" sx={{ color: tokens.teal }}>Job <Mono>{request.data.jobId.slice(0, 8)}</Mono> queued.</Typography>
+              )}
             </Stack>
           </SectionCard>
         </Grid>
+
         <Grid size={{ xs: 12, lg: 8 }}>
-          <SectionCard title="Job tracker" subtitle="Job state will live in DynamoDB report_jobs; output files in S3" action={<MockBadge stage="Stage 12" />} noPadding>
-            <Box sx={{ overflowX: 'auto' }}>
-              <Table size="small">
-                <TableHead><TableRow><TableCell>Job</TableCell><TableCell>Report</TableCell><TableCell>Dispatched</TableCell><TableCell>Status</TableCell><TableCell>Output</TableCell></TableRow></TableHead>
-                <TableBody>
-                  {MOCK_JOBS.map((j) => (
-                    <TableRow key={j.id} sx={{ bgcolor: j.status === 'FAILED' ? '#fffafa' : undefined }}>
-                      <TableCell><Mono sx={{ fontWeight: 600 }}>{j.id}</Mono></TableCell>
-                      <TableCell>{j.type}<Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>Tax year {j.year}</Typography></TableCell>
-                      <TableCell><Mono>{j.dispatched}</Mono></TableCell>
-                      <TableCell sx={{ minWidth: 140 }}>
-                        <StatusChip value={j.status} />
-                        {j.status === 'PROCESSING' && <LinearProgress variant="determinate" value={j.progress} sx={{ mt: 0.75, borderRadius: 1 }} />}
-                        {'error' in j && <Typography variant="caption" sx={{ display: 'block', color: tokens.danger }}>{j.error}</Typography>}
-                      </TableCell>
-                      <TableCell>{j.s3Key ? <Mono sx={{ fontSize: '0.72rem' }}>s3://…/{j.s3Key}</Mono> : '—'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Box>
+          <SectionCard title="My report jobs" subtitle="Newest first. Job state lives in DynamoDB; finished files in S3" noPadding>
+            <QueryState query={jobs}>
+              {jobs.data?.length === 0 ? <EmptyState>No reports requested yet.</EmptyState> : (
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table size="small">
+                    <TableHead><TableRow><TableCell>Job</TableCell><TableCell>Report</TableCell><TableCell>Requested</TableCell><TableCell>Status</TableCell><TableCell>File</TableCell></TableRow></TableHead>
+                    <TableBody>
+                      {(jobs.data ?? []).map((job) => <JobRow key={job.jobId} job={job} />)}
+                    </TableBody>
+                  </Table>
+                </Box>
+              )}
+            </QueryState>
           </SectionCard>
         </Grid>
       </Grid>
     </>
+  )
+}
+
+function JobRow({ job }: { job: ReportJob }) {
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const download = () => {
+    setDownloading(true)
+    setError(null)
+    downloadFile(`/api/reports/${job.jobId}/download`, `report-${job.jobId.slice(0, 8)}.csv`)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Download failed'))
+      .finally(() => setDownloading(false))
+  }
+
+  return (
+    <TableRow sx={{ bgcolor: job.status === 'FAILED' ? '#fffafa' : undefined }}>
+      <TableCell><Tooltip title={job.jobId}><span><Mono sx={{ fontWeight: 600 }}>{job.jobId.slice(0, 8)}</Mono></span></Tooltip></TableCell>
+      <TableCell>{enumLabel(job.type)}<Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>Tax year {job.taxYear}</Typography></TableCell>
+      <TableCell><Mono>{job.requestedAt.slice(0, 19).replace('T', ' ')}</Mono></TableCell>
+      <TableCell sx={{ minWidth: 150 }}>
+        <StatusChip value={job.status} />
+        {isActive(job) && <LinearProgress sx={{ mt: 0.75, borderRadius: 1 }} />}
+        {job.errorMessage && <Typography variant="caption" sx={{ display: 'block', color: tokens.danger }}>{job.errorMessage}</Typography>}
+        {error && <Typography variant="caption" sx={{ display: 'block', color: tokens.danger }}>{error}</Typography>}
+      </TableCell>
+      <TableCell>
+        {job.downloadable ? (
+          <Tooltip title="Download CSV">
+            <span>
+              <IconButton size="small" onClick={download} disabled={downloading} aria-label={`Download report ${job.jobId.slice(0, 8)}`}>
+                {downloading ? <CircularProgress size={18} /> : <DownloadOutlinedIcon fontSize="small" />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        ) : '—'}
+      </TableCell>
+    </TableRow>
   )
 }

@@ -7,7 +7,7 @@
 /docs       Steering files and documentation
 compose.yaml  Local stack: postgres (127.0.0.1:5433) → backend (internal only) → web/nginx (127.0.0.1:8088)
 /scripts   seed-demo-data.sh (fictional data through the API)
-/infra     CloudFormation: network, database, storage, report-jobs (see aws-architecture.md, deployment.md)
+/infra     CloudFormation: network, database, storage, report-jobs, report-workflow (see aws-architecture.md, deployment.md)
 ```
 
 ## Backend
@@ -23,7 +23,10 @@ com.propertytax
 ├── taxrate/
 ├── taxaccount/
 ├── taxbill/
-└── payment/
+├── payment/
+├── document/      tax-bill PDFs in S3 (DocumentStore, renderer)
+├── report/        async reports: ReportJobStore (DynamoDB), ReportWorkflow (Step Functions), ReportWorker, ReportGenerator
+└── security/      SecurityConfig (all access rules), local dev token issuer
 ```
 Packages are created in the stage that first needs them — no empty scaffolding.
 
@@ -66,7 +69,7 @@ Start order is enforced by health checks: postgres → backend → web. The same
 | 8 | security-oauth2-resource-server (JWT; local dev issuer now, Cognito issuer URI when deployed) |
 | 11 | AWS SDK v2 S3, OpenPDF (PDF rendering); `adobe/s3mock` emulator for local and tests |
 | 12 | AWS SDK v2 DynamoDB; `amazon/dynamodb-local` emulator for local and tests |
-| 13 | AWS SDK v2 Step Functions |
+| 13 | AWS SDK v2 Step Functions; `amazon/aws-stepfunctions-local` emulator for local and tests |
 
 ## Target AWS shape (Stages 10–17)
 CloudFront → S3 (frontend) · ALB → ECS Fargate (API) → Aurora PostgreSQL ·

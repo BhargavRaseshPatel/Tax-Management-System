@@ -20,6 +20,8 @@
 - AWS credentials stay in `~/.aws` on the developer's machine: never in the repo, `.env`, CI logs, or chat.
 - Documents: the S3 bucket is never public and object keys/URLs are never sent to clients; downloads go through the
   API (authorized, `no-store`). Keys contain no personal data. The app's IAM policy allows only Get/Put on its prefixes.
+- Reports are staff-only, may contain officer email addresses, and are downloaded through the API (`no-store`).
+  CSV cells that a spreadsheet would run as a formula (`= + - @`) are neutralised.
 - DynamoDB holds report-job state only, never business or personal data beyond the requester's numeric user id.
 - AWS access uses the task role (default credential chain). The only credentials in code are placeholders for the
   local emulator, used solely when `S3_ENDPOINT` is set.

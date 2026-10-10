@@ -10,7 +10,7 @@ flowchart LR
   subgraph VPC["VPC 10.20.0.0/16 · network.yaml ✔"]
     subgraph public["Public subnets (2 AZs)"]
       alb --> api[ECS Fargate: API<br/>security group civictax-app · Stage 14]
-      worker[ECS Fargate: report worker<br/>Stage 13–14]
+      worker[ECS Fargate: report worker<br/>same image · deployed in Stage 14]
     end
     subgraph isolated["Isolated database subnets (2 AZs, no internet route)"]
       aurora[(Aurora PostgreSQL 17<br/>Serverless v2 · database.yaml ✔)]
@@ -23,7 +23,9 @@ flowchart LR
   worker --> s3
   api --> ddb[(DynamoDB report_jobs · report-jobs.yaml ✔)]
   worker --> ddb
-  sfn[Step Functions · Stage 13] --> worker
+  api -- StartExecution --> sfn[Step Functions · report-workflow.yaml ✔]
+  sfn -- activity task --> worker
+  sfn -- mark FAILED --> ddb
 ```
 
 ## Network and database (Stage 10)
@@ -58,6 +60,19 @@ flowchart LR
 - **Housekeeping and safety:** TTL removes jobs after 90 days; on-demand billing; point-in-time recovery; encrypted
   at rest. The IAM policy allows only GetItem, PutItem, UpdateItem and Query on the table and its index.
 
+## Asynchronous reports (Stage 13)
+- **Why asynchronous:** a report can take long and must not hold an HTTP request or an API thread; the API returns
+  a job id in milliseconds and the client polls.
+- **Why Step Functions owns the outcome:** timeout, retry and "mark FAILED" live in the state machine, not in
+  worker code, so a worker that crashes mid-report still ends with a correctly failed job.
+- **Activity task (worker polls) rather than ECS RunTask:** the whole flow runs unchanged against Amazon's local
+  emulator, so it is tested end to end without an AWS account. The worker is the backend image with one flag, an
+  ECS service in AWS; add copies to scale, Step Functions gives each task to exactly one.
+- **Idempotent:** execution name = job id (a job can't be started twice); the worker can safely repeat a job
+  (same S3 key, conditional DynamoDB writes).
+- **Least privilege:** API may only start this state machine; the worker may only take this activity's tasks; the
+  state machine may only update `report_jobs`. Reports are staff-only and served through the API like bill PDFs.
+
 ## Deliberate simplifications (demo cost) and their upgrade path
 | Simplification | Production upgrade |
 |---|---|
@@ -65,4 +80,6 @@ flowchart LR
 | One Aurora instance, 0–1 ACU, auto-pause | Second instance in another AZ (automatic failover), higher minimum capacity, no pause |
 | Application connects as the master user (it needs DDL for Flyway) | Separate least-privilege runtime user; migrations run by a dedicated task/role |
 | `DeletionProtection` off by default | On, plus longer backup retention |
+| The report worker is an always-on ECS service polling for tasks | ECS `RunTask` per job (pay only while a report runs), or scale the service to zero on queue depth |
+| Step Functions execution logging/tracing is off | CloudWatch Logs + X-Ray on the state machine |
 | PDFs are generated inside the download request and proxied through the API | Generate in the async worker (Stage 13); presigned URLs or CloudFront signed URLs for large files |

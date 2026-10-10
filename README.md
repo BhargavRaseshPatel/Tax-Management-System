@@ -20,7 +20,7 @@ host. Logs: `docker compose logs -f backend`. Stop: `docker compose stop`. Delet
 ## Run the backend (development)
 ```bash
 cp .env.example .env              # then set DB_PASSWORD (DEV_AUTH=true enables local sign-in)
-docker compose up -d --wait postgres s3 dynamodb   # database :5433, S3 emulator :9090, DynamoDB emulator :8000
+docker compose up -d --wait postgres s3 dynamodb stepfunctions   # database + AWS emulators (S3, DynamoDB, Step Functions)
 cd backend && ./mvnw spring-boot:run   # reads ../.env itself; no exports needed
 ```
 - Health: `curl localhost:8080/actuator/health` → `{"status":"UP"}` (Flyway migrates on startup)
@@ -35,7 +35,7 @@ cd frontend && npm install && npm run dev      # http://localhost:5173 (proxies 
 ```
 Load fictional demo data once, into a **fresh** database (it goes through the API, so all business rules apply):
 ```bash
-docker compose down -v && docker compose up -d --wait postgres s3 dynamodb   # reset, then (re)start the backend
+docker compose down -v && docker compose up -d --wait postgres s3 dynamodb stepfunctions   # reset, then (re)start the backend
 scripts/seed-demo-data.sh                               # needs curl + jq; signs in via the dev issuer
 ```
 Sign in as **Elena Rostova** (resident), **Marcus Vance** (tax officer) or **Sarah Chen** (admin), or switch with
@@ -43,6 +43,10 @@ Sign in as **Elena Rostova** (resident), **Marcus Vance** (tax officer) or **Sar
 
 **Documents.** Each tax bill has a *Download PDF* button. The PDF is generated on first request, stored in S3
 (locally: the `s3` emulator container, no AWS account), and served only through the API so access rules apply.
+
+**Reports.** Admins request CSV reports on the *Reports & Audits* page. The request returns a job at once; Step
+Functions hands it to the report worker (its own container in Docker, the same process in dev mode), which queries
+PostgreSQL, uploads the file to S3 and updates the job in DynamoDB. Failures are retried twice, then marked failed.
 
 **Authentication.** Every API call needs a JWT. Locally, `DEV_AUTH=true` turns on a built-in issuer that signs
 Cognito-shaped tokens (no AWS account needed); on an empty database it creates the admin `s.chen@civictax.demo`.
@@ -66,6 +70,7 @@ Tests start their own throwaway PostgreSQL 17 via Testcontainers; they never tou
 | API (MockMvc) | `ApiIntegrationTest`, `BillingWorkflowIntegrationTest` | every endpoint, status codes, ProblemDetail bodies, full billing workflow |
 | Transactions | `TransactionIntegrationTest` | rollback after a mid-transaction failure; row locks under concurrent requests |
 | Documents | `DocumentIntegrationTest`, `TaxBillDocumentServiceTest` | PDF content; stored in S3 (emulator) with key/size/time in PostgreSQL; reuse and self-heal; only staff and the owner can download |
+| Reports | `ReportWorkflowIntegrationTest`, `ReportGeneratorTest` | request → Step Functions → worker → S3 → DynamoDB → download; a failing report is tried 3 times then marked FAILED; staff only; CSV quoting and formula neutralising |
 | Report jobs | `ReportJobStoreIntegrationTest` | DynamoDB `report_jobs`: every field round-trips, status changes only in order, per-requester listing |
 | Security | `SecurityIntegrationTest` | 401 for missing/forged/garbage/deactivated tokens; role boundaries; residents only see their own records |
 

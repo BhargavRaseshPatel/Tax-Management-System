@@ -11,8 +11,8 @@ Locally get a token from `POST /api/dev/token {"email": "..."}` (only when `DEV_
 | Anyone | `GET /actuator/health`, API docs; `GET /api/dev/users`, `POST /api/dev/token` (local only) |
 | Any signed-in user | `GET /api/me` (incl. `ownerId`), `GET /api/tax-rates` |
 | RESIDENT | `GET` single records tied to a property they own: owner, property (+owners, assessments, tax-account), assessment, tax account (+bills, balance), bill (+payments, document), payment. Anything else → 403 (unknown ids too, so existence never leaks) |
-| TAX_OFFICER | read everything; create/change all tax data; read users (to link owners) |
-| ADMIN | create/change users; read-only on tax data |
+| TAX_OFFICER | read everything; create/change all tax data; read users (to link owners); request and download reports |
+| ADMIN | create/change users; read-only on tax data; request and download reports |
 
 `401` = missing, invalid, expired, or deactivated-user token. `403` = signed in but not allowed.
 Payments are recorded as the authenticated officer (no recorder in the request body).
@@ -48,3 +48,6 @@ Payments are recorded as the authenticated officer (no recorder in the request b
 | 6 | `GET /api/tax-accounts/{id}/balance` | live bills − recorded payments |
 | 6 | `GET /api/tax-bills/{id}/document` | the bill as `application/pdf` (attachment, `no-store`); generated and stored in S3 on first request; staff or owning resident; 503 if storage is down |
 | 7 | `POST/GET /api/tax-bills/{id}/payments`, `GET /api/payments/{id}`, `POST /api/payments/{id}/reverse` | simulated; ≤ outstanding; unique reference |
+| 8 | `POST /api/reports` | `{type, taxYear}` → **202** with the job (`QUEUED`); work happens in the background. Types: `TAX_ROLL_SUMMARY`, `OUTSTANDING_BALANCES`, `PAYMENTS_RECONCILIATION` |
+| 8 | `GET /api/reports`, `GET /api/reports/{jobId}` | my jobs newest first; one job. Poll until `COMPLETED` or `FAILED` (`errorMessage`) |
+| 8 | `GET /api/reports/{jobId}/download` | the CSV (attachment, `no-store`); 409 until the job is `COMPLETED` |

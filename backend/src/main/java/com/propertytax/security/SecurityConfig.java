@@ -74,6 +74,8 @@ public class SecurityConfig {
 					.requestMatchers(GET, "/api/tax-bills/{id}", "/api/tax-bills/{id}/payments", "/api/tax-bills/{id}/document")
 						.access(staffOr(ownership::userOwnsBill))
 					.requestMatchers(GET, "/api/payments/{id}").access(staffOr(ownership::userOwnsPayment))
+					// Reports (request, track, download): staff only
+					.requestMatchers("/api/reports", "/api/reports/**").hasAnyRole(ADMIN, TAX_OFFICER)
 					// Everything else: staff read; only tax officers change tax data
 					.requestMatchers(GET, "/api/**").hasAnyRole(ADMIN, TAX_OFFICER)
 					.requestMatchers("/api/**").hasRole(TAX_OFFICER)

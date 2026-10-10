@@ -1,6 +1,7 @@
 # Local stack. Values come from .env (copy .env.example).
 #   Everything:      docker compose up -d --build --wait     → http://localhost:8088
-#   Dev services:    docker compose up -d --wait postgres s3 dynamodb   (for ./mvnw spring-boot:run + npm run dev)
+#   Dev services:    docker compose up -d --wait postgres s3 dynamodb stepfunctions
+#                    (then ./mvnw spring-boot:run + npm run dev; the dev backend is also the report worker)
 services:
   postgres:
     image: postgres:17
@@ -42,9 +43,29 @@ services:
       interval: 5s
       retries: 10
 
-  backend:
-    build: ./backend
+  # Amazon's Step Functions emulator. Its "mark job FAILED" step writes to the DynamoDB emulator above.
+  # In-memory: the backend and worker recreate the state machine on startup.
+  stepfunctions:
+    image: amazon/aws-stepfunctions-local:2.0.0
     environment:
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      AWS_DEFAULT_REGION: ca-central-1
+      AWS_ACCESS_KEY_ID: local # emulator placeholders, not real credentials
+      AWS_SECRET_ACCESS_KEY: local
+    ports:
+      - "127.0.0.1:${STEP_FUNCTIONS_PORT:-8083}:8083" # host access for the non-Docker backend
+    depends_on:
+      dynamodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:8083/ || exit 1"]
+      interval: 5s
+      retries: 10
+
+  # The API. Not published: reachable only through the web container's /api proxy.
+  backend: &app
+    build: ./backend
+    environment: &app-env
       DB_HOST: postgres
       DB_PORT: "5432" # container network port, not the host mapping above
       DB_NAME: ${DB_NAME}
@@ -52,9 +73,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_URL_PARAMS: "" # local container has no TLS; Aurora uses verify-full (see docs/deployment.md)
       DEV_AUTH: ${DEV_AUTH:-false} # local token issuer; this stack is for local use only
-      S3_ENDPOINT: http://s3:9090 # the emulator above; unset in AWS so the SDK talks to real S3
+      # Emulators above. All four are unset in AWS, so the SDK talks to the real services.
+      S3_ENDPOINT: http://s3:9090
       DOCUMENTS_BUCKET: ${DOCUMENTS_BUCKET:-civictax-documents}
-      DYNAMODB_ENDPOINT: http://dynamodb:8000 # the emulator above; unset in AWS
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      STEP_FUNCTIONS_ENDPOINT: http://stepfunctions:8083
+      REPORT_WORKER_ENABLED: "false"
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,7 +86,18 @@ services:
         condition: service_healthy
       dynamodb:
         condition: service_healthy
-    # Not published: reachable only through the web container's /api proxy.
+      stepfunctions:
+        condition: service_healthy
+
+  # The report worker: the same image as the API, with the worker switched on. A separate ECS service in AWS.
+  worker:
+    <<: *app
+    environment:
+      <<: *app-env
+      REPORT_WORKER_ENABLED: "true"
+    depends_on:
+      backend:
+        condition: service_healthy # the API runs the database migrations first
 
   web:
     build: ./frontend

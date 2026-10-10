@@ -173,3 +173,34 @@ String) → **Additional settings → Time to Live** on `expiresAt` → **Backup
 Cost: on-demand billing, so an idle table costs nothing; a demo's worth of requests is well under a cent.
 
 Clean up: `aws cloudformation delete-stack --region ca-central-1 --stack-name civictax-report-jobs` (deletes the table).
+
+---
+
+## Stage 13 — Asynchronous report processing (Step Functions + worker)
+
+Flow: `POST /api/reports` → job written to DynamoDB (`QUEUED`) → Step Functions execution started (named after the
+job id) → the worker receives the activity task → reads PostgreSQL, writes the CSV to S3 (`reports/<year>/…`),
+marks the job `COMPLETED` → the API serves the file. If an attempt fails or exceeds 5 minutes, Step Functions
+retries twice (2 s, then 4 s), then its own final step marks the job `FAILED` with the error.
+
+Locally: `compose.yaml` runs Amazon's Step Functions Local and a separate `worker` container (the backend image with
+`REPORT_WORKER_ENABLED=true`). In AWS leave `STEP_FUNCTIONS_ENDPOINT` **unset** and set the two ARNs from the stack.
+
+```bash
+aws cloudformation deploy --region ca-central-1 --stack-name civictax-report-workflow \
+  --template-file infra/report-workflow.yaml --capabilities CAPABILITY_IAM
+aws cloudformation describe-stacks --region ca-central-1 --stack-name civictax-report-workflow \
+  --query "Stacks[0].Outputs[].[OutputKey,OutputValue]" --output table
+```
+Creates: the activity, the state machine and its role (may only `UpdateItem` on `report_jobs`), and two managed
+policies: **requester** (`StartExecution` on this state machine, for the API) and **worker** (`GetActivityTask` on
+this activity plus the task-token calls). Settings: `REPORT_STATE_MACHINE_ARN`, `REPORT_ACTIVITY_ARN`; the worker
+service additionally gets `REPORT_WORKER_ENABLED=true`. The worker itself is deployed as an ECS service in Stage 14.
+
+By hand in the console instead: **Step Functions → Activities → Create** `civictax-report-worker` → **State machines
+→ Create** (Standard), paste `backend/src/main/resources/report-workflow.asl.json` replacing `${ActivityArn}` and
+`${TableName}` → give its role `dynamodb:UpdateItem` on `report_jobs`.
+
+Cost: Standard workflows bill per state transition (a report is about 3–8 transitions; thousands are free each
+month). Clean up: `aws cloudformation delete-stack --region ca-central-1 --stack-name civictax-report-workflow`
+(before deleting `civictax-report-jobs`, which it imports from).
