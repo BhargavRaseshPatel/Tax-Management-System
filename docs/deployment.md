@@ -32,8 +32,9 @@ What gets created:
 
 ### Option A — CloudFormation (recommended: repeatable, one command to delete)
 ```bash
-# 1. Network (about 1 minute)
+# 1. Network (about 1 minute), then the KMS key that everything else encrypts with (Stage 16)
 aws cloudformation deploy --region ca-central-1 --stack-name civictax-network --template-file infra/network.yaml
+aws cloudformation deploy --region ca-central-1 --stack-name civictax-security --template-file infra/security.yaml
 
 # 2. Which Aurora PostgreSQL 17 versions does the region offer? Pick the newest.
 aws rds describe-db-engine-versions --region ca-central-1 --engine aurora-postgresql \
@@ -210,8 +211,7 @@ month). Clean up: `aws cloudformation delete-stack --region ca-central-1 --stack
 ## Stage 14 — ECR, ECS and Fargate
 
 Stack order for a full deployment (each imports from the ones before):
-`network → database → storage → report-jobs → report-workflow → registry → edge → auth → app`
-(`edge` is Stage 15; deploy it before `auth` and `app`, which use its outputs).
+`network → security → database → storage → report-jobs → report-workflow → registry → edge → auth → app`.
 
 ```bash
 REGION=ca-central-1
@@ -327,3 +327,19 @@ Cost: the load balancer is the main fixed cost, roughly US$0.60–0.70 a day; Cl
 
 Clean up: empty the frontend bucket (`aws s3 rm s3://$BUCKET --recursive`), then delete `civictax-app`,
 `civictax-auth`, `civictax-edge` in that order. CloudFront takes several minutes to delete.
+
+---
+
+## Stage 16 — Security hardening
+
+`infra/security.yaml` (deployed second, see Stage 10 step 1) creates one customer-managed KMS key with yearly
+rotation. The database, its secret, the documents bucket, the `report_jobs` table, the image repository and the
+application log group all encrypt with it. Nothing extra to run: the other templates import the key.
+
+The full list of controls, the scanner results and the known gaps are in [security.md](security.md).
+
+Cost: one KMS key is about US$1 a month plus fractions of a cent per thousand uses.
+
+Clean up: the key is kept when the stack is deleted (deleting it would make every backup and document
+unreadable). When everything else is gone: `aws kms schedule-key-deletion --key-id alias/civictax-data
+--pending-window-in-days 7`.

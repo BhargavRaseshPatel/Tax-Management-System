@@ -29,6 +29,9 @@
 - DynamoDB holds report-job state only, never business or personal data beyond the requester's numeric user id.
 - AWS access uses the task role (default credential chain). The only credentials in code are placeholders for the
   local emulator, used solely when `S3_ENDPOINT` is set.
-- Least-privilege IAM per task role; encryption at rest with KMS; TLS everywhere in AWS.
+- Least-privilege IAM per task role; data at rest uses the customer-managed KMS key; TLS everywhere it is possible
+  (see the one exception in security.md).
+- Before merging infrastructure changes: `cfn-lint` and `checkov` must be clean. A new Checkov skip needs a written
+  reason in the template and a row in security.md.
 - Payments are simulated records only — no real card/bank data is ever accepted or stored.
 - Dependencies are scanned in CI (SAST, Stage 17).

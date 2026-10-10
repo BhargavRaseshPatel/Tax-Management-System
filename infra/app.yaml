@@ -30,6 +30,11 @@ Parameters:
 Resources:
   Cluster:
     Type: AWS::ECS::Cluster
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_65
+            comment: "Demo cost: Container Insights off. Task health and logs are in ECS and CloudWatch Logs"
     Properties:
       ClusterName: !Ref ProjectName
 
@@ -40,6 +45,7 @@ Resources:
     Properties:
       LogGroupName: !Sub '/ecs/${ProjectName}'
       RetentionInDays: 30
+      KmsKeyId: !ImportValue { 'Fn::Sub': '${ProjectName}-DataKeyArn' }
 
   # ---- IAM ---------------------------------------------------------------------------------------------------
   # Used by ECS itself to start a task: pull the image, write logs, read the database secret. Not by our code.
@@ -52,14 +58,26 @@ Resources:
           - Effect: Allow
             Principal: { Service: ecs-tasks.amazonaws.com }
             Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
       Policies:
-        - PolicyName: read-database-secret
+        # Scoped by hand instead of the broad AWS-managed AmazonECSTaskExecutionRolePolicy (any repository, any log group).
+        - PolicyName: start-civictax-tasks
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Effect: Allow
+              - Sid: RegistryLogin # not resource-scoped by IAM design; grants no access to any image by itself
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Sid: PullThisImageOnly
+                Effect: Allow
+                Action: [ecr:BatchCheckLayerAvailability, ecr:GetDownloadUrlForLayer, ecr:BatchGetImage]
+                Resource: !ImportValue { 'Fn::Sub': '${ProjectName}-BackendRepositoryArn' }
+              - Sid: WriteThisLogGroupOnly
+                Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub '${LogGroup.Arn}:*'
+              - Sid: ReadDatabaseSecretOnly
+                Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource: !ImportValue { 'Fn::Sub': '${ProjectName}-DbSecretArn' }
 
@@ -127,6 +145,8 @@ Resources:
             - { Name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-CognitoIssuerUri' } }
             - { Name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-CognitoWebClientId' } }
             - { Name: BOOTSTRAP_ADMIN_EMAIL, Value: !Ref BootstrapAdminEmail }
+            - { Name: SPRINGDOC_API_DOCS_ENABLED, Value: 'false' } # no API description or Swagger UI in AWS
+            - { Name: SPRINGDOC_SWAGGER_UI_ENABLED, Value: 'false' }
             # Deliberately absent: DEV_AUTH and every *_ENDPOINT emulator setting.
           Secrets: # injected by ECS from Secrets Manager at start; never in the template, image or logs
             - Name: DB_USERNAME

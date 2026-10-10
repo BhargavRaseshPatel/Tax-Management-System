@@ -41,7 +41,10 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
       DeletionProtectionEnabled: !Ref DeletionProtection
-      # Encrypted at rest by default with an AWS-owned key; Stage 16 switches to a customer-managed KMS key.
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !ImportValue { 'Fn::Sub': '${ProjectName}-DataKeyArn' }
 
   # The four operations the code performs, on this table and its index only. No Scan, no DeleteItem, no table admin.
   ReportJobsAccessPolicy:

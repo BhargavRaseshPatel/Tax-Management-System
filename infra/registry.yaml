@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   CivicTax demo - ECR repository for the backend image (the API and the report worker run the same image).
-  Deploy before app.yaml, then push an image.
+  Deploy after security.yaml and before app.yaml, then push an image.
 
 Parameters:
   ProjectName:
@@ -15,6 +15,9 @@ Resources:
     Properties:
       RepositoryName: !Sub '${ProjectName}-backend'
       ImageTagMutability: IMMUTABLE # a tag always means the same image; deploys name an exact tag
+      EncryptionConfiguration:
+        EncryptionType: KMS
+        KmsKey: !ImportValue { 'Fn::Sub': '${ProjectName}-DataKeyArn' }
       ImageScanningConfiguration:
         ScanOnPush: true
       EmptyOnDelete: true # demo clean-up: deleting the stack removes the images too
@@ -28,3 +31,6 @@ Outputs:
   BackendRepositoryUri:
     Value: !GetAtt BackendRepository.RepositoryUri
     Export: { Name: !Sub '${ProjectName}-BackendRepositoryUri' }
+  BackendRepositoryArn:
+    Value: !GetAtt BackendRepository.Arn
+    Export: { Name: !Sub '${ProjectName}-BackendRepositoryArn' }

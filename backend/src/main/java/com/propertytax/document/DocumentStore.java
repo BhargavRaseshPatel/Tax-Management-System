@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
-import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 
 /**
  * The only class that talks to Amazon S3. The bucket is private; clients never get a key or a URL, they download
@@ -31,9 +30,9 @@ public class DocumentStore {
 				.build();
 	}
 
+	/** No encryption header on purpose: the bucket's default (the customer-managed KMS key) always applies. */
 	public void put(String key, byte[] content, String contentType) {
-		s3.putObject(request -> request.bucket(bucket).key(key).contentType(contentType)
-				.serverSideEncryption(ServerSideEncryption.AES256), RequestBody.fromBytes(content));
+		s3.putObject(request -> request.bucket(bucket).key(key).contentType(contentType), RequestBody.fromBytes(content));
 	}
 
 	/** Empty when the object does not exist. */

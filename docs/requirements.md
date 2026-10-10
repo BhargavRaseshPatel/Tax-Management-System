@@ -43,5 +43,6 @@ final = annual − interim; overpayments rejected (decided in Stage 5).
 | 12 DynamoDB report_jobs | Table + store done against DynamoDB Local. Template not deployed |
 | 13 Async reports | Done end to end against local emulators (Step Functions, worker, S3, DynamoDB). Template not deployed |
 | 14 ECR, ECS, Fargate | Templates (registry, Cognito, app) validated offline. **Not deployed** |
-| 15 ALB, CloudFront, HTTPS | Template validated offline; frontend Cognito sign-in built and partly checked locally — awaiting approval. **Not deployed** |
-| 16–19 | Not started |
+| 15 ALB, CloudFront, HTTPS | Template validated offline; frontend Cognito sign-in built and partly checked locally. **Not deployed** |
+| 16 AWS security | KMS key, tighter IAM, guards; Checkov and Gitleaks scans clean — awaiting approval. See [security.md](security.md). **Not deployed** |
+| 17–19 | Not started |

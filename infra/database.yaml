@@ -1,7 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   CivicTax demo - Amazon Aurora PostgreSQL (Serverless v2, scales to zero when idle). Private subnets, encrypted at
-  rest, TLS required, master password generated and stored by AWS in Secrets Manager. Deploy network.yaml first.
+  rest, TLS required, master password generated and stored by AWS in Secrets Manager. Deploy network.yaml and
+  security.yaml first.
 
 Parameters:
   ProjectName:
@@ -53,6 +54,11 @@ Resources:
 
   Cluster:
     Type: AWS::RDS::DBCluster
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_162
+            comment: "The application authenticates with a Secrets Manager secret that RDS rotates; IAM database authentication is not used"
     DeletionPolicy: Snapshot # deleting the stack leaves a final snapshot behind
     UpdateReplacePolicy: Snapshot
     Properties:
@@ -60,12 +66,15 @@ Resources:
       EngineVersion: !Ref EngineVersion
       DatabaseName: !Ref DatabaseName
       MasterUsername: !Ref MasterUsername
-      ManageMasterUserPassword: true # RDS generates the password and keeps it in Secrets Manager
+      ManageMasterUserPassword: true # RDS generates the password, keeps it in Secrets Manager and rotates it
+      MasterUserSecret:
+        KmsKeyId: !ImportValue { 'Fn::Sub': '${ProjectName}-DataKeyArn' }
       DBSubnetGroupName: !Ref SubnetGroup
       VpcSecurityGroupIds:
         - !ImportValue { 'Fn::Sub': '${ProjectName}-DatabaseSecurityGroupId' }
       DBClusterParameterGroupName: !Ref ClusterParameterGroup
-      StorageEncrypted: true # AWS-managed KMS key; Stage 16 switches to a customer-managed key
+      StorageEncrypted: true
+      KmsKeyId: !ImportValue { 'Fn::Sub': '${ProjectName}-DataKeyArn' } # customer-managed key (security.yaml); also covers backups and snapshots
       BackupRetentionPeriod: 7
       CopyTagsToSnapshot: true
       DeletionProtection: !Ref DeletionProtection
@@ -77,6 +86,11 @@ Resources:
 
   Instance:
     Type: AWS::RDS::DBInstance
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_118
+            comment: "Demo cost: no enhanced monitoring. PostgreSQL logs are exported to CloudWatch"
     Properties:
       DBClusterIdentifier: !Ref Cluster
       Engine: aurora-postgresql

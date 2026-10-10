@@ -38,7 +38,7 @@ flowchart LR
   (KMS-encrypted). It never appears in a template, a parameter, the repo, or a terminal.
 - **In transit:** `rds.force_ssl=1` rejects plain connections; the backend uses `sslmode=verify-full` with Amazon's
   RDS CA bundle (baked into the image), so it also refuses an impostor server.
-- **At rest:** storage encryption with the AWS-managed key (customer-managed KMS key in Stage 16).
+- **At rest:** encrypted with the customer-managed KMS key from `security.yaml`, including backups and snapshots.
 - **Schema:** identical to local. Flyway migrates on application start; local PostgreSQL 17 and Aurora PostgreSQL 17
   run the same SQL.
 
@@ -47,7 +47,7 @@ flowchart LR
   public objects and no presigned URLs: clients download through `GET /api/tax-bills/{id}/document`, so the same role
   and data-ownership rules as every other endpoint apply, and responses are `Cache-Control: no-store`.
 - **Least privilege:** the application may only get and put objects under `tax-bills/` and `reports/`.
-- **Encryption:** SSE-S3 by bucket default and on every put (customer-managed KMS key in Stage 16); versioning on.
+- **Encryption:** the bucket default is the customer-managed KMS key and uploads cannot ask for less; versioning on.
 - **Metadata** (key, size, generated time) lives in PostgreSQL on `tax_bills`; keys contain no personal data.
 - **Local:** the `adobe/s3mock` emulator in Docker Compose and in tests. (LocalStack now requires a paid/registered
   token, so each AWS service gets its own small emulator instead.)
@@ -60,7 +60,8 @@ flowchart LR
 - **Correctness under retries:** every status change is a conditional write that succeeds only from the expected
   current status, so two workers can't claim one job and a finished job can't be reopened.
 - **Housekeeping and safety:** TTL removes jobs after 90 days; on-demand billing; point-in-time recovery; encrypted
-  at rest. The IAM policy allows only GetItem, PutItem, UpdateItem and Query on the table and its index.
+  at rest with the customer-managed key. The IAM policy allows only GetItem, PutItem, UpdateItem and Query on the
+  table and its index.
 
 ## Asynchronous reports (Stage 13)
 - **Why asynchronous:** a report can take long and must not hold an HTTP request or an API thread; the API returns
@@ -96,6 +97,8 @@ flowchart LR
 - **The frontend bucket is private**, readable only by this distribution (origin access control).
 - **Sign-in** is Cognito's hosted page via authorization code + PKCE, implemented with the browser's Web Crypto
   (no SDK). The token lives in `sessionStorage`; there is no refresh, so a session lasts 60 minutes.
+
+Security controls, scan results and open gaps are consolidated in [security.md](security.md).
 
 ## Deliberate simplifications (demo cost) and their upgrade path
 | Simplification | Production upgrade |

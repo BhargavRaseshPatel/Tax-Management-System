@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   CivicTax demo - the public entry point. CloudFront (HTTPS) serves the React build from a private S3 bucket and
   forwards /api/* to an Application Load Balancer in front of the ECS API service. Deploy after network.yaml and
-  before auth.yaml and app.yaml.
+  security.yaml, before auth.yaml and app.yaml.
 
 Parameters:
   ProjectName:
@@ -26,6 +26,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Description: Shared secret CloudFront sends to the load balancer (X-Origin-Verify)
+      KmsKeyId: !ImportValue { 'Fn::Sub': '${ProjectName}-DataKeyArn' }
       GenerateSecretString:
         PasswordLength: 48
         ExcludePunctuation: true
@@ -55,6 +56,11 @@ Resources:
 
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_91
+            comment: "Demo: no access-log bucket. Requests are logged by the application in CloudWatch. Upgrade: ALB access logs to a log bucket"
     Properties:
       Type: application
       Scheme: internet-facing
@@ -83,6 +89,13 @@ Resources:
   # you own. With a domain: add an ACM certificate + HTTPS:443 listener here and set the origin to https-only.
   Listener:
     Type: AWS::ElasticLoadBalancingV2::Listener
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_2
+            comment: "No certificate is possible without an owned domain. Only CloudFront can reach this listener (prefix list + secret header). Upgrade: ACM certificate + HTTPS listener"
+          - id: CKV_AWS_103
+            comment: "Same as CKV_AWS_2: HTTP listener by necessity until a domain exists"
     Properties:
       LoadBalancerArn: !Ref LoadBalancer
       Protocol: HTTP
@@ -108,6 +121,13 @@ Resources:
   # ---- Frontend bucket (private; only this distribution can read it) ----------------------------------------
   FrontendBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: "Public static build output served via CloudFront; no access-log bucket in the demo"
+          - id: CKV_AWS_21
+            comment: "Reproducible build output; every release is rebuilt from git, so versions add cost without recovery value"
     DeletionPolicy: Delete # build output, reproducible from source (empty it before deleting the stack)
     UpdateReplacePolicy: Delete
     Properties:
@@ -197,6 +217,15 @@ Resources:
 
   Distribution:
     Type: AWS::CloudFront::Distribution
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_174
+            comment: "The default cloudfront.net certificate fixes the minimum TLS version; it is configurable only with a custom domain certificate"
+          - id: CKV_AWS_68
+            comment: "Demo cost: no AWS WAF. Upgrade: managed rule groups on this distribution"
+          - id: CKV_AWS_86
+            comment: "Demo: no access-log bucket. Upgrade: CloudFront standard logging"
     Properties:
       DistributionConfig:
         Enabled: true

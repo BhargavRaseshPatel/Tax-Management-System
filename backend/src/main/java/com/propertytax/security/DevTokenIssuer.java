@@ -47,7 +47,15 @@ public class DevTokenIssuer {
 	private final JwtEncoder encoder = new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(key)));
 
 	DevTokenIssuer() {
+		refuseOnEcs(System.getenv("ECS_CONTAINER_METADATA_URI_V4"));
 		log.warn("DEV_AUTH is enabled: local token issuer active. Never enable this outside local development.");
+	}
+
+	/** ECS sets that variable in every task. If DEV_AUTH ever reaches a deployed task, stop instead of serving. */
+	static void refuseOnEcs(String ecsMetadataUri) {
+		if (ecsMetadataUri != null && !ecsMetadataUri.isBlank()) {
+			throw new IllegalStateException("DEV_AUTH must never be enabled on ECS: it lets anyone sign in as any user");
+		}
 	}
 
 	public IssuedToken issue(User user) {

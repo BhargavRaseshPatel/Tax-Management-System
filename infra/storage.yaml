@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   CivicTax demo - private S3 bucket for generated documents (tax-bill PDFs now, reports in Stage 13) and the
-  least-privilege IAM policy the application's task role will use. Independent of the network and database stacks.
+  least-privilege IAM policy the application's task role will use. Deploy security.yaml first.
 
 Parameters:
   ProjectName:
@@ -12,6 +12,11 @@ Parameters:
 Resources:
   DocumentsBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: "Demo: no access-log bucket. Every download goes through the API, which logs it. Upgrade: S3 server access logs or CloudTrail data events"
     DeletionPolicy: Retain # documents are records: deleting the stack never deletes them (see clean-up in deployment.md)
     UpdateReplacePolicy: Retain
     Properties:
@@ -28,7 +33,9 @@ Resources:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256 # S3-managed keys; Stage 16 switches to a customer-managed KMS key
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !ImportValue { 'Fn::Sub': '${ProjectName}-DataKeyArn' }
+            BucketKeyEnabled: true # one data key per bucket instead of one KMS call per object
       VersioningConfiguration:
         Status: Enabled # an overwritten or deleted document can be recovered
       LifecycleConfiguration:
@@ -48,6 +55,14 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
+          - Sid: DenyEncryptionDowngrade # an upload may not ask for anything weaker than the bucket's KMS default
+            Effect: Deny
+            Principal: '*'
+            Action: s3:PutObject
+            Resource: !Sub '${DocumentsBucket.Arn}/*'
+            Condition:
+              StringNotEqualsIfExists:
+                's3:x-amz-server-side-encryption': aws:kms
           - Sid: DenyInsecureTransport
             Effect: Deny
             Principal: '*'

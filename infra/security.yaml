@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CivicTax demo - one customer-managed KMS key for data at rest: Aurora, secrets, the documents bucket, the
+  report_jobs table, container images and application logs. Deploy right after network.yaml.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: civictax
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+
+Resources:
+  DataKey:
+    Type: AWS::KMS::Key
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_33
+            comment: "Wildcard principal is limited by kms:CallerAccount (this account) and kms:ViaService (five services): the pattern AWS uses for its own managed keys"
+    DeletionPolicy: Retain # losing the key means losing every snapshot, document and log encrypted with it
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub '${ProjectName} data at rest'
+      EnableKeyRotation: true # new key material every year; old data stays readable
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          # Standard: lets IAM policies in this account administer the key (without it the key is unmanageable).
+          - Sid: AccountAdministration
+            Effect: Allow
+            Principal: { AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root' }
+            Action: 'kms:*'
+            Resource: '*'
+          # The key can be used only THROUGH these five services, by principals of this account that are already
+          # allowed to use the resource in question. Nobody can call KMS directly to decrypt data with it.
+          - Sid: UseOnlyThroughDataServices
+            Effect: Allow
+            Principal: { AWS: '*' }
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+              - kms:DescribeKey
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'kms:CallerAccount': !Ref 'AWS::AccountId'
+                'kms:ViaService':
+                  - !Sub 'rds.${AWS::Region}.amazonaws.com'
+                  - !Sub 's3.${AWS::Region}.amazonaws.com'
+                  - !Sub 'dynamodb.${AWS::Region}.amazonaws.com'
+                  - !Sub 'secretsmanager.${AWS::Region}.amazonaws.com'
+                  - !Sub 'ecr.${AWS::Region}.amazonaws.com'
+          # CloudWatch Logs encrypts the application log group; limited to that one log group.
+          - Sid: ApplicationLogs
+            Effect: Allow
+            Principal: { Service: !Sub 'logs.${AWS::Region}.amazonaws.com' }
+            Action:
+              - kms:Encrypt*
+              - kms:Decrypt*
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: '*'
+            Condition:
+              ArnEquals:
+                'kms:EncryptionContext:aws:logs:arn': !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${ProjectName}'
+
+  DataKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${ProjectName}-data'
+      TargetKeyId: !Ref DataKey
+
+Outputs:
+  DataKeyArn:
+    Value: !GetAtt DataKey.Arn
+    Export: { Name: !Sub '${ProjectName}-DataKeyArn' }
