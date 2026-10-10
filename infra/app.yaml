@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   CivicTax demo - ECS Fargate: one cluster, two services from the same backend image. "api" serves HTTP; "worker"
-  generates reports (REPORT_WORKER_ENABLED=true). Needs every other stack deployed and an image pushed to ECR.
+  generates reports (REPORT_WORKER_ENABLED=true). Deploy last: needs every other stack and an image pushed to ECR.
 
 Parameters:
   ProjectName:
@@ -204,8 +204,8 @@ Resources:
 
   # ---- Services ----------------------------------------------------------------------------------------------
   # ponytail: tasks run in public subnets with a public IP (no NAT gateway to pay for). The app security group
-  # has no inbound rule, so nothing can reach them until Stage 15 adds the load balancer. Production: private
-  # subnets + NAT or VPC endpoints.
+  # only admits the load balancer (edge.yaml), so the public IP is unreachable from the internet. Production:
+  # private subnets + NAT or VPC endpoints.
   ApiService:
     Type: AWS::ECS::Service
     Properties:
@@ -218,6 +218,11 @@ Resources:
         MinimumHealthyPercent: 100 # start the new task before stopping the old one
         MaximumPercent: 200
         DeploymentCircuitBreaker: { Enable: true, Rollback: true } # a build that never gets healthy rolls back
+      HealthCheckGracePeriodSeconds: 180 # don't let the load balancer kill a task that is still starting
+      LoadBalancers:
+        - ContainerName: api
+          ContainerPort: 8080
+          TargetGroupArn: !ImportValue { 'Fn::Sub': '${ProjectName}-ApiTargetGroupArn' }
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED

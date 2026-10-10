@@ -42,5 +42,6 @@ final = annual − interim; overpayments rejected (decided in Stage 5).
 | 11 S3 documents | Done locally against an S3 emulator. Bucket template validated offline, not deployed |
 | 12 DynamoDB report_jobs | Table + store done against DynamoDB Local. Template not deployed |
 | 13 Async reports | Done end to end against local emulators (Step Functions, worker, S3, DynamoDB). Template not deployed |
-| 14 ECR, ECS, Fargate | Templates (registry, Cognito, app) validated offline — awaiting approval. **Not deployed.** Frontend Cognito sign-in still to do (Stage 15) |
-| 15–19 | Not started |
+| 14 ECR, ECS, Fargate | Templates (registry, Cognito, app) validated offline. **Not deployed** |
+| 15 ALB, CloudFront, HTTPS | Template validated offline; frontend Cognito sign-in built and partly checked locally — awaiting approval. **Not deployed** |
+| 16–19 | Not started |

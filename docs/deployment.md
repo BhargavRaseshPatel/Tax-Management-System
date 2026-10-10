@@ -210,7 +210,8 @@ month). Clean up: `aws cloudformation delete-stack --region ca-central-1 --stack
 ## Stage 14 — ECR, ECS and Fargate
 
 Stack order for a full deployment (each imports from the ones before):
-`network → database → storage → report-jobs → report-workflow → registry → auth → app`.
+`network → database → storage → report-jobs → report-workflow → registry → edge → auth → app`
+(`edge` is Stage 15; deploy it before `auth` and `app`, which use its outputs).
 
 ```bash
 REGION=ca-central-1
@@ -258,9 +259,8 @@ aws ecs describe-services --region $REGION --cluster civictax --services api wor
   --query "services[].{service:serviceName,running:runningCount,desired:desiredCount,rollout:deployments[0].rolloutState}" --output table
 aws logs tail /ecs/civictax --region $REGION --since 10m     # expect "Started BackendApplication" twice, "Report worker started" once
 ```
-The API has no public address yet: the app security group has no inbound rule until Stage 15 adds the load
-balancer. **The frontend cannot sign in against Cognito yet either** (it only has the local sign-in); Stage 15
-adds the hosted-login redirect together with CloudFront.
+The API is reachable only through CloudFront and the load balancer from Stage 15 (`edge.yaml`), which `app.yaml`
+attaches the API service to.
 
 New image later: build and push a new tag, then rerun step 3 with `ImageTag=<new tag>`.
 
@@ -269,3 +269,61 @@ rerun step 3 adding `ApiDesiredCount=0 WorkerDesiredCount=0`. Cognito is free at
 
 Clean up: `aws cloudformation delete-stack --stack-name civictax-app`, wait, then `civictax-auth` and
 `civictax-registry` (the registry deletes its images with it).
+
+---
+
+## Stage 15 — Load balancer, CloudFront, HTTPS, Cognito sign-in
+
+```
+Browser ──HTTPS──► CloudFront ──┬─ default ──► private S3 bucket (React build)
+                                └─ /api/*  ──► Application Load Balancer ──► ECS API tasks :8080
+```
+
+```bash
+REGION=ca-central-1
+# 1. Edge: load balancer, frontend bucket, CloudFront (10–15 minutes)
+PL=$(aws ec2 describe-managed-prefix-lists --region $REGION \
+  --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing \
+  --query "PrefixLists[0].PrefixListId" --output text)
+aws cloudformation deploy --region $REGION --stack-name civictax-edge --template-file infra/edge.yaml \
+  --parameter-overrides CloudFrontPrefixListId=$PL
+out() { aws cloudformation describe-stacks --region $REGION --stack-name $1 --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text; }
+APP_URL=$(out civictax-edge AppUrl)
+
+# 2. Cognito, told where sign-in may return to; then the app stack (Stage 14, step 3)
+aws cloudformation deploy --region $REGION --stack-name civictax-auth --template-file infra/auth.yaml \
+  --parameter-overrides CallbackUrls="$APP_URL/login,http://localhost:5173/login"
+
+# 3. Build the frontend for Cognito and upload it (both values are public identifiers, not secrets)
+cd frontend
+VITE_COGNITO_DOMAIN=$(out civictax-auth HostedUiUrl) VITE_COGNITO_CLIENT_ID=$(out civictax-auth WebClientId) npm run build
+BUCKET=$(out civictax-edge FrontendBucketName)
+aws s3 sync dist s3://$BUCKET --delete --exclude index.html --cache-control "public,max-age=31536000,immutable"
+aws s3 cp dist/index.html s3://$BUCKET/index.html --cache-control "no-cache"
+aws cloudfront create-invalidation --distribution-id $(out civictax-edge DistributionId) --paths "/index.html"
+echo "Open $APP_URL"
+```
+
+How each requirement is met:
+
+| | |
+|---|---|
+| HTTPS | CloudFront redirects HTTP to HTTPS and sends HSTS; the API path is HTTPS-only. Certificate: CloudFront's own (`*.cloudfront.net`) |
+| Routing | `/api/*` → load balancer (no caching, all methods, `Authorization` forwarded); everything else → S3. A CloudFront Function serves `index.html` for page routes, so API 403/404 responses are never replaced by HTML |
+| Health checks | Target group polls `/actuator/health` every 15 s (2 passes to join, 3 failures to leave); ECS waits 180 s before judging a new task; 30 s drain on deploy |
+| Only CloudFront reaches the API | Load balancer security group admits CloudFront's address list only, **and** the listener forwards only requests carrying a generated secret header (anything else gets 403) |
+| Only CloudFront reads the bucket | Origin access control; the bucket blocks all public access |
+| Not exposed | Swagger UI, `/v3/api-docs` and `/actuator` are not routed at all |
+
+Sign-in: the login page sends the browser to Cognito's hosted page (authorization code + PKCE, no client secret),
+exchanges the returned code for an ID token, and the backend matches the token's email to a user. Someone Cognito
+knows but the application doesn't is told to ask an administrator.
+
+**Limitation:** between CloudFront and the load balancer the traffic is plain HTTP on AWS's network, because AWS
+cannot issue a certificate for the load balancer without a domain you own. With a domain: request an ACM
+certificate, add an HTTPS:443 listener, and set the `api` origin to `https-only`.
+
+Cost: the load balancer is the main fixed cost, roughly US$0.60–0.70 a day; CloudFront and S3 are cents for a demo.
+
+Clean up: empty the frontend bucket (`aws s3 rm s3://$BUCKET --recursive`), then delete `civictax-app`,
+`civictax-auth`, `civictax-edge` in that order. CloudFront takes several minutes to delete.

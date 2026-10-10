@@ -5,8 +5,9 @@ Region **ca-central-1**. Infrastructure is CloudFormation in [`/infra`](../infra
 
 ```mermaid
 flowchart LR
-  user([Browser]) --> cf[CloudFront + S3<br/>frontend · Stage 15]
-  user --> alb[Application Load Balancer<br/>Stage 15]
+  user([Browser]) -- HTTPS --> cf[CloudFront · edge.yaml ✔]
+  cf --> web[(private S3: React build)]
+  cf -- "/api/* + secret header" --> alb[Application Load Balancer<br/>edge.yaml ✔]
   subgraph VPC["VPC 10.20.0.0/16 · network.yaml ✔"]
     subgraph public["Public subnets (2 AZs)"]
       alb --> api[ECS Fargate: API service<br/>security group civictax-app · app.yaml ✔]
@@ -87,12 +88,24 @@ flowchart LR
   TOTP MFA. The backend checks issuer, signature, expiry and audience, then reads the role from its own users
   table. `BOOTSTRAP_ADMIN_EMAIL` creates the first admin on an empty database, and only then.
 
+## Edge (Stage 15)
+- **One HTTPS origin for the browser:** CloudFront serves the frontend and proxies `/api/*`, so there is no CORS
+  and the same Content-Security-Policy as local nginx applies (plus the Cognito domain).
+- **The load balancer is not a second front door:** CloudFront's address list at the network layer and a generated
+  secret header at the HTTP layer; a direct request gets 403. The tasks accept only the load balancer.
+- **The frontend bucket is private**, readable only by this distribution (origin access control).
+- **Sign-in** is Cognito's hosted page via authorization code + PKCE, implemented with the browser's Web Crypto
+  (no SDK). The token lives in `sessionStorage`; there is no refresh, so a session lasts 60 minutes.
+
 ## Deliberate simplifications (demo cost) and their upgrade path
 | Simplification | Production upgrade |
 |---|---|
 | No NAT gateway: Fargate tasks will run in public subnets with a public IP, protected by security groups | Private app subnets + NAT gateway or VPC endpoints (ECR, Secrets Manager, CloudWatch, S3) |
 | One Aurora instance, 0–1 ACU, auto-pause | Second instance in another AZ (automatic failover), higher minimum capacity, no pause |
 | Application connects as the master user (it needs DDL for Flyway) | Separate least-privilege runtime user; migrations run by a dedicated task/role |
+| HTTP between CloudFront and the load balancer (no certificate without a domain) | Own domain + ACM certificate + HTTPS listener, or an internal load balancer behind a CloudFront VPC origin |
+| No refresh-token use: sign in again after 60 minutes | Silent refresh with the refresh token |
+| No WAF | AWS WAF managed rules on the distribution |
 | `DeletionProtection` off by default | On, plus longer backup retention |
 | The report worker is an always-on ECS service polling for tasks | ECS `RunTask` per job (pay only while a report runs), or scale the service to zero on queue depth |
 | Step Functions execution logging/tracing is off | CloudWatch Logs + X-Ray on the state machine |

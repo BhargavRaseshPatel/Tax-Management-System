@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api, onUnauthorized, setAuthToken } from '../api/client'
+import { api, ApiError, onUnauthorized, setAuthToken } from '../api/client'
 import type { SessionUser } from '../api/types'
+import { cognitoEnabled, signOutUrl } from './cognito'
 import { SessionContext, type Session } from './session'
 
 /** sessionStorage: survives a reload, gone when the tab closes, never shared across tabs (unlike localStorage). */
@@ -43,6 +44,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAuthToken(null)
     queryClient.clear() // never show one user's cached data to the next
     setUser(null)
+    if (cognitoEnabled) location.assign(signOutUrl())
+  }
+
+  const begin = (token: string, next: SessionUser) => {
+    store({ token, user: next })
+    setAuthToken(token)
+    queryClient.clear()
+    setUser(next)
+    return next
   }
 
   // An expired or revoked token (401 from any call) ends the session.
@@ -52,14 +62,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     user,
     signOut,
     signIn: async (email) => {
-      // Local dev issuer. With Cognito this becomes the hosted-login redirect + token exchange.
       const response = await api<{ accessToken: string; user: SessionUser }>('/api/dev/token', { method: 'POST', body: { email } })
-      const next = { token: response.accessToken, user: response.user }
-      store(next)
-      setAuthToken(next.token)
-      queryClient.clear()
-      setUser(next.user)
-      return next.user
+      return begin(response.accessToken, response.user)
+    },
+    signInWithToken: async (token) => {
+      try {
+        return begin(token, await api<SessionUser>('/api/me', { token }))
+      } catch (e) {
+        // Cognito knows this person, but the application does not (or the account is deactivated).
+        if (e instanceof ApiError && e.status === 401) {
+          throw new Error('This account is not registered in CivicTax, or has been deactivated. Ask an administrator to add your email.')
+        }
+        throw e
+      }
     },
   }
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

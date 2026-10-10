@@ -26,11 +26,12 @@ export function onUnauthorized(handler: () => void) {
 }
 
 /** The only place that talks HTTP: attaches the bearer token and turns every failure into an ApiError. */
-async function send(path: string, options: { method?: string; body?: unknown } = {}): Promise<Response> {
+async function send(path: string, options: { method?: string; body?: unknown; token?: string } = {}): Promise<Response> {
   let response: Response
   const headers: Record<string, string> = {}
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
-  if (authToken) headers.Authorization = `Bearer ${authToken}`
+  const token = options.token ?? authToken // an explicit token is used while signing in, before a session exists
+  if (token) headers.Authorization = `Bearer ${token}`
   try {
     response = await fetch(path, {
       method: options.method ?? 'GET',
@@ -56,7 +57,7 @@ async function send(path: string, options: { method?: string; body?: unknown } =
 }
 
 /** JSON request/response. */
-export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function api<T>(path: string, options: { method?: string; body?: unknown; token?: string } = {}): Promise<T> {
   const response = await send(path, options)
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T)
 }

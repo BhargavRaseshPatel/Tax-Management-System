@@ -7,7 +7,10 @@ import type { Role, SessionUser } from '../api/types'
  */
 export interface Session {
   user: SessionUser | null
+  /** Local dev sign-in: the backend's dev issuer returns a token for this user. */
   signIn: (email: string) => Promise<SessionUser>
+  /** Cognito sign-in: we already hold a token; ask the backend who it belongs to. */
+  signInWithToken: (token: string) => Promise<SessionUser>
   signOut: () => void
 }
 

@@ -18,6 +18,7 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
 import { useApi } from '../api/client'
 import type { Role, SessionUser } from '../api/types'
 import { ROLES } from '../api/types'
+import { cognitoEnabled } from '../auth/cognito'
 import { HOME_BY_ROLE, ROLE_LABEL, useSession } from '../auth/session'
 import { tokens } from '../theme'
 import { initials } from './format'
@@ -123,9 +124,9 @@ function ApiStatus() {
 function RolePreview({ user }: { user: SessionUser }) {
   const { signIn } = useSession()
   const navigate = useNavigate()
-  const users = useApi<SessionUser[]>('/api/dev/users')
+  const users = useApi<SessionUser[]>(cognitoEnabled ? null : '/api/dev/users')
   const firstOf = (role: Role) => users.data?.find((u) => u.role === role)
-  if (users.isError) return null
+  if (cognitoEnabled || users.isError) return null
 
   return (
     <ToggleButtonGroup

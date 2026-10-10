@@ -54,7 +54,7 @@ Deployed environments leave `DEV_AUTH` unset and point at Amazon Cognito instead
 `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>`.
 With neither configured the backend refuses to start. In Swagger UI, use **Authorize** with a token from
 `POST /api/dev/token`.
-Checks: `npm run build` (TypeScript + bundle) and `npm run lint`.
+Checks: `npm run build` (TypeScript + bundle), `npm run lint`, and `npm test` (sign-in PKCE helper).
 
 ## Run the tests
 ```bash

@@ -8,10 +8,12 @@ Parameters:
     Type: String
     Default: civictax
     AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
-  CallbackUrl:
-    Type: String
-    Default: http://localhost:5173/
-    Description: Where the hosted sign-in page returns to. Becomes the CloudFront URL in Stage 15.
+  CallbackUrls:
+    Type: CommaDelimitedList
+    Default: http://localhost:5173/login
+    Description: >-
+      Where the hosted sign-in page may return to: the app URL from edge.yaml plus /login
+      (keep http://localhost:5173/login as well to test Cognito sign-in from a local frontend).
 
 Resources:
   UserPool:
@@ -46,8 +48,8 @@ Resources:
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows: [code]
       AllowedOAuthScopes: [openid, email]
-      CallbackURLs: [!Ref CallbackUrl]
-      LogoutURLs: [!Ref CallbackUrl]
+      CallbackURLs: !Ref CallbackUrls
+      LogoutURLs: !Ref CallbackUrls
       ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
       PreventUserExistenceErrors: ENABLED
       AccessTokenValidity: 60
