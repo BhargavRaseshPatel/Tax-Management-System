@@ -69,4 +69,8 @@ Run one class: `./mvnw test -Dtest=TransactionIntegrationTest`.
 **Troubleshooting:** if tests fail with `…class cannot be opened because it does not exist`, an IDE (e.g. VS Code's
 Java extension) recompiled into `target/` during the run. Wait for the IDE build to finish and rerun.
 
+## Deploying to AWS
+Step-by-step in [docs/deployment.md](docs/deployment.md); design in [docs/aws-architecture.md](docs/aws-architecture.md).
+Local development needs no AWS account.
+
 See [docs/](docs/) for requirements, architecture, database design, security rules, and standards.

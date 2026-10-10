@@ -14,7 +14,10 @@
 - Frontend route guards are UX only. The token lives in `sessionStorage` (per tab, cleared on close), never
   `localStorage`; any 401 clears it.
 - Error responses never leak stack traces or SQL.
-- Database is never publicly reachable outside local development.
+- Database is never publicly reachable outside local development. In AWS it sits in isolated subnets, accepts 5432
+  only from the application security group, requires TLS (`rds.force_ssl=1`), and the app connects with
+  `sslmode=verify-full`. The master password is generated and held by Secrets Manager; it is never typed or stored.
+- AWS credentials stay in `~/.aws` on the developer's machine: never in the repo, `.env`, CI logs, or chat.
 - Least-privilege IAM per task role; encryption at rest with KMS; TLS everywhere in AWS.
 - Payments are simulated records only — no real card/bank data is ever accepted or stored.
 - Dependencies are scanned in CI (SAST, Stage 17).

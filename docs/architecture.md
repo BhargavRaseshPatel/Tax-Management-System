@@ -7,6 +7,7 @@
 /docs       Steering files and documentation
 compose.yaml  Local stack: postgres (127.0.0.1:5433) → backend (internal only) → web/nginx (127.0.0.1:8088)
 /scripts   seed-demo-data.sh (fictional data through the API)
+/infra     CloudFormation: network.yaml, database.yaml (see aws-architecture.md, deployment.md)
 ```
 
 ## Backend

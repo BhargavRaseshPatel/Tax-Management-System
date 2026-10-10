@@ -12,6 +12,8 @@ FROM eclipse-temurin:21-jre
 RUN groupadd --system app && useradd --system --gid app app
 WORKDIR /app
 COPY --from=build /src/app.jar app.jar
+# Amazon's public RDS certificate authority bundle, so the app can verify Aurora's TLS certificate (sslmode=verify-full).
+ADD --chmod=444 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-ca.pem
 USER app
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=60s --retries=5 \

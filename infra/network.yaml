@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CivicTax demo - network. One VPC across two Availability Zones with public subnets (load balancer, application
+  tasks) and isolated database subnets that have no route to the internet. No NAT gateway, to keep the demo cheap.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: civictax
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-vpc' }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-igw' }
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # ---- Public subnets: load balancer and (Stage 14) Fargate tasks -------------------------------------------
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-public-a' }
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-public-b' }
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-public' }
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  # ---- Database subnets: isolated. Their route table only has the implicit local (in-VPC) route. ------------
+  DatabaseSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-database-a' }
+
+  DatabaseSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-database-b' }
+
+  DatabaseRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-database-isolated' }
+
+  DatabaseSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DatabaseSubnetA
+      RouteTableId: !Ref DatabaseRouteTable
+
+  DatabaseSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DatabaseSubnetB
+      RouteTableId: !Ref DatabaseRouteTable
+
+  # ---- Security groups ---------------------------------------------------------------------------------------
+  # Worn by the application (ECS tasks, or a CloudShell VPC session for manual checks).
+  # No inbound rules yet: Stage 15 adds "from the load balancer only".
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: CivicTax application tasks
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-app' }
+
+  # The database accepts PostgreSQL connections from the application security group and nothing else.
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: CivicTax Aurora PostgreSQL - reachable only from the application security group
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - Description: PostgreSQL from application tasks only
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+      SecurityGroupEgress:
+        # Replaces the default allow-all egress: the database never needs to open connections outward.
+        - Description: No outbound traffic
+          IpProtocol: '-1'
+          CidrIp: 127.0.0.1/32
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-database' }
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export: { Name: !Sub '${ProjectName}-VpcId' }
+  PublicSubnetIds:
+    Value: !Join [',', [!Ref PublicSubnetA, !Ref PublicSubnetB]]
+    Export: { Name: !Sub '${ProjectName}-PublicSubnetIds' }
+  DatabaseSubnetIds:
+    Value: !Join [',', [!Ref DatabaseSubnetA, !Ref DatabaseSubnetB]]
+    Export: { Name: !Sub '${ProjectName}-DatabaseSubnetIds' }
+  AppSecurityGroupId:
+    Value: !Ref AppSecurityGroup
+    Export: { Name: !Sub '${ProjectName}-AppSecurityGroupId' }
+  DatabaseSecurityGroupId:
+    Value: !Ref DatabaseSecurityGroup
+    Export: { Name: !Sub '${ProjectName}-DatabaseSecurityGroupId' }

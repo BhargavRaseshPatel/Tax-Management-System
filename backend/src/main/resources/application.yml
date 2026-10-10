@@ -5,7 +5,9 @@ spring:
   config:
     import: optional:file:../.env[.properties],optional:file:.env[.properties]
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:property_tax}
+    # DB_URL_PARAMS is empty locally. For Aurora: ?sslmode=verify-full&sslrootcert=/app/rds-ca.pem
+    # (encrypts the connection AND checks the server's certificate against Amazon's RDS certificate authority).
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:property_tax}${DB_URL_PARAMS:}
     username: ${DB_USERNAME:property_tax}
     password: ${DB_PASSWORD}
   jpa:
