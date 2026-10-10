@@ -1,0 +1,256 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CivicTax demo - ECS Fargate: one cluster, two services from the same backend image. "api" serves HTTP; "worker"
+  generates reports (REPORT_WORKER_ENABLED=true). Needs every other stack deployed and an image pushed to ECR.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: civictax
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  ImageTag:
+    Type: String
+    Description: Tag of the backend image in ECR to run (tags are immutable, so this names one exact build)
+  BootstrapAdminEmail:
+    Type: String
+    Description: Becomes the first ADMIN when the users table is empty. Create the same email in Cognito to sign in.
+  Cpu:
+    Type: String
+    Default: '512' # 0.5 vCPU
+  Memory:
+    Type: String
+    Default: '1024' # MiB; the JVM takes 75% as heap
+  ApiDesiredCount:
+    Type: Number
+    Default: 1
+  WorkerDesiredCount:
+    Type: Number
+    Default: 1 # set 0 to stop paying for an idle worker; queued reports then wait
+
+Resources:
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ProjectName
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub '/ecs/${ProjectName}'
+      RetentionInDays: 30
+
+  # ---- IAM ---------------------------------------------------------------------------------------------------
+  # Used by ECS itself to start a task: pull the image, write logs, read the database secret. Not by our code.
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+      Policies:
+        - PolicyName: read-database-secret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !ImportValue { 'Fn::Sub': '${ProjectName}-DbSecretArn' }
+
+  # What the API's code may do in AWS: documents in S3, report job state, start report executions.
+  ApiTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !ImportValue { 'Fn::Sub': '${ProjectName}-DocumentsAccessPolicyArn' }
+        - !ImportValue { 'Fn::Sub': '${ProjectName}-ReportJobsAccessPolicyArn' }
+        - !ImportValue { 'Fn::Sub': '${ProjectName}-ReportRequesterPolicyArn' }
+
+  # The worker may take report tasks; it may NOT start executions.
+  WorkerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !ImportValue { 'Fn::Sub': '${ProjectName}-DocumentsAccessPolicyArn' }
+        - !ImportValue { 'Fn::Sub': '${ProjectName}-ReportJobsAccessPolicyArn' }
+        - !ImportValue { 'Fn::Sub': '${ProjectName}-ReportWorkerPolicyArn' }
+
+  # ---- Task definitions (the two differ only in task role and REPORT_WORKER_ENABLED) -------------------------
+  ApiTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ProjectName}-api'
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      RuntimePlatform: { CpuArchitecture: ARM64, OperatingSystemFamily: LINUX } # Graviton: cheaper, matches Apple-silicon builds
+      Cpu: !Ref Cpu
+      Memory: !Ref Memory
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt ApiTaskRole.Arn
+      ContainerDefinitions:
+        - Name: api
+          Image: !Sub
+            - '${RepositoryUri}:${ImageTag}'
+            - RepositoryUri: !ImportValue { 'Fn::Sub': '${ProjectName}-BackendRepositoryUri' }
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8080
+          Environment:
+            - { Name: REPORT_WORKER_ENABLED, Value: 'false' }
+            - { Name: AWS_REGION, Value: !Ref 'AWS::Region' }
+            - { Name: DB_HOST, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbEndpoint' } }
+            - { Name: DB_PORT, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbPort' } }
+            - { Name: DB_NAME, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbName' } }
+            - { Name: DB_URL_PARAMS, Value: '?sslmode=verify-full&sslrootcert=/app/rds-ca.pem' }
+            - { Name: DOCUMENTS_BUCKET, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DocumentsBucketName' } }
+            - { Name: REPORT_JOBS_TABLE, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportJobsTableName' } }
+            - { Name: REPORT_STATE_MACHINE_ARN, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportStateMachineArn' } }
+            - { Name: REPORT_ACTIVITY_ARN, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportActivityArn' } }
+            - { Name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-CognitoIssuerUri' } }
+            - { Name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-CognitoWebClientId' } }
+            - { Name: BOOTSTRAP_ADMIN_EMAIL, Value: !Ref BootstrapAdminEmail }
+            # Deliberately absent: DEV_AUTH and every *_ENDPOINT emulator setting.
+          Secrets: # injected by ECS from Secrets Manager at start; never in the template, image or logs
+            - Name: DB_USERNAME
+              ValueFrom: !Sub
+                - '${SecretArn}:username::'
+                - SecretArn: !ImportValue { 'Fn::Sub': '${ProjectName}-DbSecretArn' }
+            - Name: DB_PASSWORD
+              ValueFrom: !Sub
+                - '${SecretArn}:password::'
+                - SecretArn: !ImportValue { 'Fn::Sub': '${ProjectName}-DbSecretArn' }
+          HealthCheck:
+            Command: [CMD-SHELL, 'curl -fsS http://localhost:8080/actuator/health || exit 1']
+            Interval: 15
+            Timeout: 5
+            Retries: 4
+            StartPeriod: 120 # JVM start + Flyway + Aurora waking from pause
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: api
+
+  WorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ProjectName}-worker'
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      RuntimePlatform: { CpuArchitecture: ARM64, OperatingSystemFamily: LINUX }
+      Cpu: !Ref Cpu
+      Memory: !Ref Memory
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt WorkerTaskRole.Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image: !Sub
+            - '${RepositoryUri}:${ImageTag}'
+            - RepositoryUri: !ImportValue { 'Fn::Sub': '${ProjectName}-BackendRepositoryUri' }
+          Essential: true
+          Environment:
+            - { Name: REPORT_WORKER_ENABLED, Value: 'true' }
+            - { Name: AWS_REGION, Value: !Ref 'AWS::Region' }
+            - { Name: DB_HOST, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbEndpoint' } }
+            - { Name: DB_PORT, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbPort' } }
+            - { Name: DB_NAME, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbName' } }
+            - { Name: DB_URL_PARAMS, Value: '?sslmode=verify-full&sslrootcert=/app/rds-ca.pem' }
+            - { Name: DOCUMENTS_BUCKET, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DocumentsBucketName' } }
+            - { Name: REPORT_JOBS_TABLE, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportJobsTableName' } }
+            - { Name: REPORT_STATE_MACHINE_ARN, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportStateMachineArn' } }
+            - { Name: REPORT_ACTIVITY_ARN, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportActivityArn' } }
+            - { Name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-CognitoIssuerUri' } }
+            - { Name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-CognitoWebClientId' } }
+          Secrets:
+            - Name: DB_USERNAME
+              ValueFrom: !Sub
+                - '${SecretArn}:username::'
+                - SecretArn: !ImportValue { 'Fn::Sub': '${ProjectName}-DbSecretArn' }
+            - Name: DB_PASSWORD
+              ValueFrom: !Sub
+                - '${SecretArn}:password::'
+                - SecretArn: !ImportValue { 'Fn::Sub': '${ProjectName}-DbSecretArn' }
+          HealthCheck:
+            Command: [CMD-SHELL, 'curl -fsS http://localhost:8080/actuator/health || exit 1']
+            Interval: 15
+            Timeout: 5
+            Retries: 4
+            StartPeriod: 120
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: worker
+
+  # ---- Services ----------------------------------------------------------------------------------------------
+  # ponytail: tasks run in public subnets with a public IP (no NAT gateway to pay for). The app security group
+  # has no inbound rule, so nothing can reach them until Stage 15 adds the load balancer. Production: private
+  # subnets + NAT or VPC endpoints.
+  ApiService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: api
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref ApiTaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: !Ref ApiDesiredCount
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100 # start the new task before stopping the old one
+        MaximumPercent: 200
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true } # a build that never gets healthy rolls back
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Split [',', !ImportValue { 'Fn::Sub': '${ProjectName}-PublicSubnetIds' }]
+          SecurityGroups:
+            - !ImportValue { 'Fn::Sub': '${ProjectName}-AppSecurityGroupId' }
+
+  WorkerService:
+    Type: AWS::ECS::Service
+    DependsOn: ApiService # the API runs the database migrations first
+    Properties:
+      ServiceName: worker
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref WorkerTaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: !Ref WorkerDesiredCount
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0 # a worker can simply be replaced; a task it was running is retried by Step Functions
+        MaximumPercent: 100
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Split [',', !ImportValue { 'Fn::Sub': '${ProjectName}-PublicSubnetIds' }]
+          SecurityGroups:
+            - !ImportValue { 'Fn::Sub': '${ProjectName}-AppSecurityGroupId' }
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+    Export: { Name: !Sub '${ProjectName}-ClusterName' }
+  ApiServiceName:
+    Value: !GetAtt ApiService.Name
+    Export: { Name: !Sub '${ProjectName}-ApiServiceName' }
+  LogGroupName:
+    Value: !Ref LogGroup

@@ -7,6 +7,8 @@
 - Swagger UI / `/v3/api-docs` are dev conveniences: disable (`springdoc.*.enabled=false`) or restrict in production (Stage 16).
 - Every `/api/**` call requires a valid JWT (Spring Security resource server); all rules live in `SecurityConfig`
   and default to deny. Roles are read from the database per request, so deactivation/role changes apply at once.
+- Deployed: tokens come from the Cognito user pool (no self sign-up); the backend validates issuer and audience.
+  `BOOTSTRAP_ADMIN_EMAIL` only acts on an empty users table.
 - `DEV_AUTH=true` (local token issuer) must never be set in a deployed environment; it logs a WARN at startup.
   Production uses the Cognito issuer URI. With no issuer configured the app fails to start (fail closed).
 - Residents are restricted by data ownership (via `property_owners`), not just role. Denials are 403 even for

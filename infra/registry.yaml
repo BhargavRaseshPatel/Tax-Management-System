@@ -1,0 +1,30 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CivicTax demo - ECR repository for the backend image (the API and the report worker run the same image).
+  Deploy before app.yaml, then push an image.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: civictax
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+
+Resources:
+  BackendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${ProjectName}-backend'
+      ImageTagMutability: IMMUTABLE # a tag always means the same image; deploys name an exact tag
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EmptyOnDelete: true # demo clean-up: deleting the stack removes the images too
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {"rules":[{"rulePriority":1,"description":"Keep the 10 newest images",
+            "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},
+            "action":{"type":"expire"}}]}
+
+Outputs:
+  BackendRepositoryUri:
+    Value: !GetAtt BackendRepository.RepositoryUri
+    Export: { Name: !Sub '${ProjectName}-BackendRepositoryUri' }

@@ -9,15 +9,16 @@ flowchart LR
   user --> alb[Application Load Balancer<br/>Stage 15]
   subgraph VPC["VPC 10.20.0.0/16 · network.yaml ✔"]
     subgraph public["Public subnets (2 AZs)"]
-      alb --> api[ECS Fargate: API<br/>security group civictax-app · Stage 14]
-      worker[ECS Fargate: report worker<br/>same image · deployed in Stage 14]
+      alb --> api[ECS Fargate: API service<br/>security group civictax-app · app.yaml ✔]
+      worker[ECS Fargate: worker service<br/>same image · app.yaml ✔]
     end
     subgraph isolated["Isolated database subnets (2 AZs, no internet route)"]
       aurora[(Aurora PostgreSQL 17<br/>Serverless v2 · database.yaml ✔)]
     end
     api -- "5432 · TLS verify-full" --> aurora
   end
-  api -. JWT .-> cognito[Amazon Cognito · Stage 8 swap-in]
+  api -. validates JWT .-> cognito[Amazon Cognito user pool · auth.yaml ✔]
+  ecr[(ECR · registry.yaml ✔)] -. image .-> api
   api --> sm[Secrets Manager<br/>DB credentials ✔]
   api --> s3[(S3 documents · storage.yaml ✔)]
   worker --> s3
@@ -72,6 +73,19 @@ flowchart LR
   (same S3 key, conditional DynamoDB writes).
 - **Least privilege:** API may only start this state machine; the worker may only take this activity's tasks; the
   state machine may only update `report_jobs`. Reports are staff-only and served through the API like bill PDFs.
+
+## Compute (Stage 14)
+- **One image, two services.** ECR holds one immutable-tagged, scan-on-push backend image; the `api` and `worker`
+  ECS services differ only in one environment flag and their task role.
+- **Roles are split three ways:** the *execution role* (ECS pulls the image, writes logs, reads the DB secret), the
+  *API task role* and the *worker task role* (what our code may do). The worker cannot start executions; the API
+  cannot take tasks; neither can do anything outside its S3 prefixes and the one DynamoDB table.
+- **Secrets** reach the container as environment variables injected by ECS from Secrets Manager at start.
+- **Safe deploys:** the API starts a new task and waits for its health check before stopping the old one; a build
+  that never becomes healthy is rolled back automatically (deployment circuit breaker).
+- **Sign-in:** a Cognito user pool with no self sign-up (admins create accounts), 12-character passwords, optional
+  TOTP MFA. The backend checks issuer, signature, expiry and audience, then reads the role from its own users
+  table. `BOOTSTRAP_ADMIN_EMAIL` creates the first admin on an empty database, and only then.
 
 ## Deliberate simplifications (demo cost) and their upgrade path
 | Simplification | Production upgrade |

@@ -204,3 +204,68 @@ By hand in the console instead: **Step Functions → Activities → Create** `ci
 Cost: Standard workflows bill per state transition (a report is about 3–8 transitions; thousands are free each
 month). Clean up: `aws cloudformation delete-stack --region ca-central-1 --stack-name civictax-report-workflow`
 (before deleting `civictax-report-jobs`, which it imports from).
+
+---
+
+## Stage 14 — ECR, ECS and Fargate
+
+Stack order for a full deployment (each imports from the ones before):
+`network → database → storage → report-jobs → report-workflow → registry → auth → app`.
+
+```bash
+REGION=ca-central-1
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+REPO=$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/civictax-backend
+TAG=$(git rev-parse --short HEAD)          # tags are immutable: one tag = one exact build
+
+# 1. Registry and sign-in
+aws cloudformation deploy --region $REGION --stack-name civictax-registry --template-file infra/registry.yaml
+aws cloudformation deploy --region $REGION --stack-name civictax-auth --template-file infra/auth.yaml
+
+# 2. Build and push the image (Apple-silicon Macs build arm64, which is what the tasks run on)
+aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT.dkr.ecr.$REGION.amazonaws.com
+docker build --platform linux/arm64 -t $REPO:$TAG backend
+docker push $REPO:$TAG
+
+# 3. Cluster, task definitions, API service, worker service (5–10 minutes)
+aws cloudformation deploy --region $REGION --stack-name civictax-app --template-file infra/app.yaml \
+  --capabilities CAPABILITY_IAM --parameter-overrides ImageTag=$TAG BootstrapAdminEmail=you@example.org
+
+# 4. Create the matching sign-in for the first admin (Cognito emails a temporary password)
+POOL=$(aws cloudformation describe-stacks --region $REGION --stack-name civictax-auth \
+  --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" --output text)
+aws cognito-idp admin-create-user --region $REGION --user-pool-id $POOL --username you@example.org \
+  --user-attributes Name=email,Value=you@example.org Name=email_verified,Value=true
+```
+
+What runs:
+
+| | API service | Worker service |
+|---|---|---|
+| Image | `civictax-backend:<tag>` | same image, `REPORT_WORKER_ENABLED=true` |
+| Size | 0.5 vCPU, 1 GiB, ARM64 | same |
+| Task role | documents (S3), report jobs (DynamoDB), **start** executions | documents, report jobs, **take** activity tasks |
+| Health check | `curl /actuator/health` in the container, 120 s start period | same |
+| Deploys | new task healthy before the old one stops; automatic rollback | replaced in place; Step Functions retries any interrupted report |
+| Logs | CloudWatch `/ecs/civictax`, stream prefix `api`, 30 days | prefix `worker` |
+
+Database username/password are injected by ECS from the Secrets Manager secret; `DEV_AUTH` and all emulator
+endpoints are absent, so the backend uses Cognito, Aurora, S3, DynamoDB and Step Functions.
+
+Check it:
+```bash
+aws ecs describe-services --region $REGION --cluster civictax --services api worker \
+  --query "services[].{service:serviceName,running:runningCount,desired:desiredCount,rollout:deployments[0].rolloutState}" --output table
+aws logs tail /ecs/civictax --region $REGION --since 10m     # expect "Started BackendApplication" twice, "Report worker started" once
+```
+The API has no public address yet: the app security group has no inbound rule until Stage 15 adds the load
+balancer. **The frontend cannot sign in against Cognito yet either** (it only has the local sign-in); Stage 15
+adds the hosted-login redirect together with CloudFront.
+
+New image later: build and push a new tag, then rerun step 3 with `ImageTag=<new tag>`.
+
+Cost: two always-on 0.5 vCPU / 1 GiB ARM tasks are roughly US$1 a day together. Pause without deleting:
+rerun step 3 adding `ApiDesiredCount=0 WorkerDesiredCount=0`. Cognito is free at this scale; ECR storage is cents.
+
+Clean up: `aws cloudformation delete-stack --stack-name civictax-app`, wait, then `civictax-auth` and
+`civictax-registry` (the registry deletes its images with it).

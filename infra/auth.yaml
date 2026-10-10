@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CivicTax demo - Amazon Cognito user pool: who can sign in. Roles are NOT stored here; the application reads them
+  from its users table, matched by the email in the token.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: civictax
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  CallbackUrl:
+    Type: String
+    Default: http://localhost:5173/
+    Description: Where the hosted sign-in page returns to. Becomes the CloudFront URL in Stage 15.
+
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${ProjectName}-users'
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true # no self sign-up: accounts are created by an administrator
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      MfaConfiguration: OPTIONAL
+      EnabledMfas: [SOFTWARE_TOKEN_MFA]
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - { Name: verified_email, Priority: 1 }
+
+  # Browser (single-page app) client: no client secret, authorization-code flow with PKCE.
+  WebClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub '${ProjectName}-web'
+      GenerateSecret: false
+      SupportedIdentityProviders: [COGNITO]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email]
+      CallbackURLs: [!Ref CallbackUrl]
+      LogoutURLs: [!Ref CallbackUrl]
+      ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
+      PreventUserExistenceErrors: ENABLED
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      TokenValidityUnits: { AccessToken: minutes, IdToken: minutes }
+
+  HostedUiDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: !Sub '${ProjectName}-${AWS::AccountId}'
+
+Outputs:
+  IssuerUri:
+    Description: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI for the backend
+    Value: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
+    Export: { Name: !Sub '${ProjectName}-CognitoIssuerUri' }
+  WebClientId:
+    Description: Audience the backend accepts, and the client id the frontend signs in with
+    Value: !Ref WebClient
+    Export: { Name: !Sub '${ProjectName}-CognitoWebClientId' }
+  UserPoolId:
+    Value: !Ref UserPool
+  HostedUiUrl:
+    Value: !Sub 'https://${ProjectName}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com'
