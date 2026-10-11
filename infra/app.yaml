@@ -137,7 +137,6 @@ Resources:
             - { Name: DB_HOST, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbEndpoint' } }
             - { Name: DB_PORT, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbPort' } }
             - { Name: DB_NAME, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbName' } }
-            - { Name: DB_URL_PARAMS, Value: '?sslmode=verify-full&sslrootcert=/app/rds-ca.pem' }
             - { Name: DOCUMENTS_BUCKET, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DocumentsBucketName' } }
             - { Name: REPORT_JOBS_TABLE, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportJobsTableName' } }
             - { Name: REPORT_STATE_MACHINE_ARN, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportStateMachineArn' } }
@@ -193,7 +192,6 @@ Resources:
             - { Name: DB_HOST, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbEndpoint' } }
             - { Name: DB_PORT, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbPort' } }
             - { Name: DB_NAME, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DbName' } }
-            - { Name: DB_URL_PARAMS, Value: '?sslmode=verify-full&sslrootcert=/app/rds-ca.pem' }
             - { Name: DOCUMENTS_BUCKET, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-DocumentsBucketName' } }
             - { Name: REPORT_JOBS_TABLE, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportJobsTableName' } }
             - { Name: REPORT_STATE_MACHINE_ARN, Value: !ImportValue { 'Fn::Sub': '${ProjectName}-ReportStateMachineArn' } }

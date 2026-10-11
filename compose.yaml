@@ -71,7 +71,6 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
-      DB_URL_PARAMS: "" # local container has no TLS; Aurora uses verify-full (see docs/deployment.md)
       DEV_AUTH: ${DEV_AUTH:-false} # local token issuer; this stack is for local use only
       # Emulators above. All four are unset in AWS, so the SDK talks to the real services.
       S3_ENDPOINT: http://s3:9090

@@ -18,9 +18,9 @@
 - Frontend route guards are UX only. The token lives in `sessionStorage` (per tab, cleared on close), never
   `localStorage`; any 401 clears it.
 - Error responses never leak stack traces or SQL.
-- Database is never publicly reachable outside local development. In AWS it sits in isolated subnets, accepts 5432
-  only from the application security group, requires TLS (`rds.force_ssl=1`), and the app connects with
-  `sslmode=verify-full`. The master password is generated and held by Secrets Manager; it is never typed or stored.
+- Database is never publicly reachable outside local development. In AWS it has no public address and accepts 5432
+  only from the application security group. The master password is generated and held by Secrets Manager; it is
+  never typed or stored. (Isolated database subnets and verified TLS live on the `networking` branch, not on `main`.)
 - AWS credentials stay in `~/.aws` on the developer's machine: never in the repo, `.env`, CI logs, or chat.
 - Documents: the S3 bucket is never public and object keys/URLs are never sent to clients; downloads go through the
   API (authorized, `no-store`). Keys contain no personal data. The app's IAM policy allows only Get/Put on its prefixes.

@@ -12,11 +12,9 @@ flowchart LR
     subgraph public["Public subnets (2 AZs)"]
       alb --> api[ECS Fargate: API service<br/>security group civictax-app · app.yaml ✔]
       worker[ECS Fargate: worker service<br/>same image · app.yaml ✔]
-    end
-    subgraph isolated["Isolated database subnets (2 AZs, no internet route)"]
       aurora[(Aurora PostgreSQL 17<br/>Serverless v2 · database.yaml ✔)]
     end
-    api -- "5432 · TLS verify-full" --> aurora
+    api -- "5432" --> aurora
   end
   api -. validates JWT .-> cognito[Amazon Cognito user pool · auth.yaml ✔]
   ecr[(ECR · registry.yaml ✔)] -. image .-> api
@@ -31,13 +29,15 @@ flowchart LR
 ```
 
 ## Network and database (Stage 10)
-- **Isolation:** the database subnets' route table has only the in-VPC route. The cluster is `PubliclyAccessible: false`.
+- **Placement:** the database shares the two public subnets with the application. The cluster is
+  `PubliclyAccessible: false`, so it has no public address. The isolated-subnet and verified-TLS variant is kept on
+  the `networking` branch.
 - **Who can reach the database:** only resources wearing the `civictax-app` security group, on port 5432.
   The database security group has no outbound rules.
 - **Credentials:** `ManageMasterUserPassword` makes RDS generate the password and store it in Secrets Manager
   (KMS-encrypted). It never appears in a template, a parameter, the repo, or a terminal.
-- **In transit:** `rds.force_ssl=1` rejects plain connections; the backend uses `sslmode=verify-full` with Amazon's
-  RDS CA bundle (baked into the image), so it also refuses an impostor server.
+- **In transit:** not enforced. The PostgreSQL driver's default (`sslmode=prefer`) uses TLS when the server offers
+  it, but does not check the server's certificate.
 - **At rest:** encrypted with the customer-managed KMS key from `security.yaml`, including backups and snapshots.
 - **Schema:** identical to local. Flyway migrates on application start; local PostgreSQL 17 and Aurora PostgreSQL 17
   run the same SQL.

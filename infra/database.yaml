@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  CivicTax demo - Amazon Aurora PostgreSQL (Serverless v2, scales to zero when idle). Private subnets, encrypted at
-  rest, TLS required, master password generated and stored by AWS in Secrets Manager. Deploy network.yaml and
+  CivicTax demo - Amazon Aurora PostgreSQL (Serverless v2, scales to zero when idle). Not publicly
+  accessible, encrypted at rest, master password generated and stored by AWS in Secrets Manager. Deploy network.yaml and
   security.yaml first.
 
 Parameters:
@@ -22,9 +22,6 @@ Parameters:
     Description: >-
       Aurora PostgreSQL version (keep on major 17 to match local development). List what your region offers with:
       aws rds describe-db-engine-versions --engine aurora-postgresql --query 'DBEngineVersions[].EngineVersion'
-  ParameterGroupFamily:
-    Type: String
-    Default: aurora-postgresql17
   MaxCapacity:
     Type: Number
     Default: 1
@@ -41,16 +38,8 @@ Resources:
   SubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: CivicTax isolated database subnets
-      SubnetIds: !Split [',', !ImportValue { 'Fn::Sub': '${ProjectName}-DatabaseSubnetIds' }]
-
-  ClusterParameterGroup:
-    Type: AWS::RDS::DBClusterParameterGroup
-    Properties:
-      Description: CivicTax - reject any connection that is not TLS
-      Family: !Ref ParameterGroupFamily
-      Parameters:
-        rds.force_ssl: '1'
+      DBSubnetGroupDescription: CivicTax database subnets (shared with the application)
+      SubnetIds: !Split [',', !ImportValue { 'Fn::Sub': '${ProjectName}-PublicSubnetIds' }]
 
   Cluster:
     Type: AWS::RDS::DBCluster
@@ -72,7 +61,6 @@ Resources:
       DBSubnetGroupName: !Ref SubnetGroup
       VpcSecurityGroupIds:
         - !ImportValue { 'Fn::Sub': '${ProjectName}-DatabaseSecurityGroupId' }
-      DBClusterParameterGroupName: !Ref ClusterParameterGroup
       StorageEncrypted: true
       KmsKeyId: !ImportValue { 'Fn::Sub': '${ProjectName}-DataKeyArn' } # customer-managed key (security.yaml); also covers backups and snapshots
       BackupRetentionPeriod: 7

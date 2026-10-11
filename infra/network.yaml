@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  CivicTax demo - network. One VPC across two Availability Zones with public subnets (load balancer, application
-  tasks) and isolated database subnets that have no route to the internet. No NAT gateway, to keep the demo cheap.
+  CivicTax demo - network. One VPC across two Availability Zones with public subnets shared by the load balancer,
+  the application tasks and the database. No NAT gateway, to keep the demo cheap.
 
 Parameters:
   ProjectName:
@@ -31,7 +31,7 @@ Resources:
       VpcId: !Ref Vpc
       InternetGatewayId: !Ref InternetGateway
 
-  # ---- Public subnets: load balancer and (Stage 14) Fargate tasks -------------------------------------------
+  # ---- Public subnets: load balancer, Fargate tasks and the database ------------------------------------------
   PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
@@ -79,46 +79,6 @@ Resources:
       SubnetId: !Ref PublicSubnetB
       RouteTableId: !Ref PublicRouteTable
 
-  # ---- Database subnets: isolated. Their route table only has the implicit local (in-VPC) route. ------------
-  DatabaseSubnetA:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref Vpc
-      CidrBlock: 10.20.10.0/24
-      AvailabilityZone: !Select [0, !GetAZs '']
-      MapPublicIpOnLaunch: false
-      Tags:
-        - { Key: Name, Value: !Sub '${ProjectName}-database-a' }
-
-  DatabaseSubnetB:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref Vpc
-      CidrBlock: 10.20.11.0/24
-      AvailabilityZone: !Select [1, !GetAZs '']
-      MapPublicIpOnLaunch: false
-      Tags:
-        - { Key: Name, Value: !Sub '${ProjectName}-database-b' }
-
-  DatabaseRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref Vpc
-      Tags:
-        - { Key: Name, Value: !Sub '${ProjectName}-database-isolated' }
-
-  DatabaseSubnetARouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref DatabaseSubnetA
-      RouteTableId: !Ref DatabaseRouteTable
-
-  DatabaseSubnetBRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref DatabaseSubnetB
-      RouteTableId: !Ref DatabaseRouteTable
-
   # ---- Security groups ---------------------------------------------------------------------------------------
   # Worn by the application (ECS tasks, or a CloudShell VPC session for manual checks).
   # No inbound rules yet: Stage 15 adds "from the load balancer only".
@@ -157,9 +117,6 @@ Outputs:
   PublicSubnetIds:
     Value: !Join [',', [!Ref PublicSubnetA, !Ref PublicSubnetB]]
     Export: { Name: !Sub '${ProjectName}-PublicSubnetIds' }
-  DatabaseSubnetIds:
-    Value: !Join [',', [!Ref DatabaseSubnetA, !Ref DatabaseSubnetB]]
-    Export: { Name: !Sub '${ProjectName}-DatabaseSubnetIds' }
   AppSecurityGroupId:
     Value: !Ref AppSecurityGroup
     Export: { Name: !Sub '${ProjectName}-AppSecurityGroupId' }
