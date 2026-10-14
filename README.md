@@ -4,6 +4,32 @@ Portfolio demo of a municipal property tax system modernized from a legacy Oracl
 into Spring Boot + React on AWS. **All data and tax rates are fictional.** Not affiliated with any municipality.
 Payments are simulated records only; no money moves.
 
+## Screenshots
+Taken from the AWS deployment, signed in with the password-less demo accounts. Email addresses of real
+(non-demo) accounts are blurred.
+
+**Sign in:** Cognito sign-in, plus one-click demo accounts for each role
+![Sign-in page with demo accounts](docs/screenshots/01-login.png)
+
+### Administrator
+| System overview | User management | Reports (Step Functions, DynamoDB, S3) |
+|---|---|---|
+| ![Admin overview](docs/screenshots/02-admin-overview.png) | ![User management](docs/screenshots/03-admin-users.png) | ![Reports](docs/screenshots/04-admin-reports.png) |
+
+### Tax officer
+| Overview | Properties | Owners |
+|---|---|---|
+| ![Officer overview](docs/screenshots/05-officer-overview.png) | ![Properties](docs/screenshots/06-officer-properties.png) | ![Owners](docs/screenshots/07-officer-owners.png) |
+
+| Tax rates | Tax accounts | Account bills and payments |
+|---|---|---|
+| ![Tax rates](docs/screenshots/08-officer-tax-rates.png) | ![Tax accounts](docs/screenshots/09-officer-accounts.png) | ![Account bills](docs/screenshots/10-officer-account-bills.png) |
+
+### Resident
+| My properties | Payments |
+|---|---|
+| ![Resident properties](docs/screenshots/11-resident-properties.png) | ![Resident payments](docs/screenshots/12-resident-payments.png) |
+
 ## Prerequisites
 Java 21+ and Docker (running). Maven is not needed — use the wrapper `./mvnw`.
 
