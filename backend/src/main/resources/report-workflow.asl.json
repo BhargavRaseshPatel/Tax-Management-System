@@ -35,8 +35,8 @@
           ":now": { "S.$": "$$.State.EnteredTime" }
         }
       },
-      "ResultPath": null,
-      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": null, "Next": "Failed" }],
+      "ResultPath": "$.markFailed",
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.markFailed", "Next": "Failed" }],
       "Next": "Failed"
     },
     "Failed": { "Type": "Fail", "Error": "ReportFailed", "Cause": "Report generation failed after retries" },

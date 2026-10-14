@@ -18,8 +18,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** LOCAL DEVELOPMENT ONLY sign-in: pick a user, get a token. Replaced by the Cognito hosted login when deployed. */
-@Tag(name = "0. Dev sign-in", description = "Local development only (DEV_AUTH=true); replaced by Amazon Cognito")
+/** Password-less sign-in: pick a user, get a token. Local development, or the demo accounts of a public demo. */
+@Tag(name = "0. Dev sign-in", description = "DEV_AUTH=true: local development, or the demo accounts of a public demo")
 @RestController
 @RequestMapping("/api/dev")
 @ConditionalOnProperty(name = "app.dev-auth", havingValue = "true")
@@ -46,13 +46,15 @@ class DevAuthController {
 	/** Active accounts for the sign-in picker. */
 	@GetMapping("/users")
 	List<DevUser> users() {
-		return users.findAll(Sort.by("id")).stream().filter(User::isActive).map(DevUser::from).toList();
+		return users.findAll(Sort.by("id")).stream().filter(User::isActive).filter(issuer::maySignIn)
+				.map(DevUser::from).toList();
 	}
 
 	@PostMapping("/token")
 	TokenResponse token(@Valid @RequestBody TokenRequest request) {
 		var user = users.findByEmail(request.email().toLowerCase(Locale.ROOT))
 				.filter(User::isActive)
+				.filter(issuer::maySignIn) // a public demo never issues a token for a real account
 				.orElseThrow(() -> ApiErrors.notFound("Active user", request.email()));
 		var token = issuer.issue(user);
 		return new TokenResponse(token.accessToken(), token.expiresAt(), DevUser.from(user));

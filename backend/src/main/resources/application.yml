@@ -21,6 +21,8 @@ app:
   # LOCAL ONLY: in-process token issuer standing in for Amazon Cognito (see DevTokenIssuer). Never true when deployed;
   # deployed environments set SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI to the Cognito user pool instead.
   dev-auth: ${DEV_AUTH:false}
+  # Deployed public demo only (with DEV_AUTH=true): password-less sign-in for the fictional demo accounts, next to Cognito.
+  public-demo: ${PUBLIC_DEMO:false}
   # Deployed environments: this email becomes the first ADMIN if the users table is empty (see BootstrapAdmin).
   bootstrap-admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
   aws-region: ${AWS_REGION:ca-central-1}

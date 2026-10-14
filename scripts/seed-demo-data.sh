@@ -4,6 +4,7 @@
 #
 # Usage:  scripts/seed-demo-data.sh                           # dev backend at http://localhost:8080
 #         API=http://localhost:8088 scripts/seed-demo-data.sh   # full Docker stack
+#         API=https://<app>.cloudfront.net scripts/seed-demo-data.sh   # AWS deployed with PublicDemo=true
 # Needs:  curl, jq, the backend running with DEV_AUTH=true (local sign-in), and an EMPTY database
 #         (reset with: docker compose down -v, then start the database/stack and backend again).
 set -euo pipefail

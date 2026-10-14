@@ -19,14 +19,37 @@ function exchangeOnce(code: string, state: string | null) {
   return exchange.token
 }
 
+/** The accounts the backend lets you enter without a password, grouped by role. One click signs in. */
+function DemoAccounts({ accounts, onChoose }: { accounts: SessionUser[]; onChoose: (u: SessionUser) => void }) {
+  return ROLES.map((role) => {
+    const ofRole = accounts.filter((u) => u.role === role)
+    if (ofRole.length === 0) return null
+    return (
+      <Box key={role} sx={{ mt: 1.5 }}>
+        <Divider textAlign="left"><Chip label={ROLE_LABEL[role]} size="small" /></Divider>
+        <List dense>
+          {ofRole.slice(0, 4).map((u) => (
+            <ListItemButton key={u.id} sx={{ borderRadius: 2 }} onClick={() => onChoose(u)}>
+              <ListItemAvatar><Avatar sx={{ bgcolor: tokens.navy, width: 34, height: 34, fontSize: '0.8rem' }}>{initials(u.fullName)}</Avatar></ListItemAvatar>
+              <ListItemText primary={u.fullName} secondary={u.email} slotProps={{ secondary: { sx: { fontFamily: tokens.mono, fontSize: '0.75rem' } } }} />
+              <StatusChip value={u.role} />
+            </ListItemButton>
+          ))}
+        </List>
+      </Box>
+    )
+  })
+}
+
 /**
- * Deployed (Cognito settings present at build time): a button to Amazon Cognito's hosted sign-in, and the handler
- * for the ?code it returns with. Local: choose an active user and the backend's dev issuer returns a token.
+ * Deployed (Cognito settings present at build time): a button to Amazon Cognito's hosted sign-in, the handler for
+ * the ?code it returns with, and, when the backend runs as a public demo, the fictional demo accounts below it.
+ * Local: choose an active user and the backend's dev issuer returns a token.
  */
 export function LoginPage() {
   const { user, signIn, signInWithToken } = useSession()
   const navigate = useNavigate()
-  const users = useApi<SessionUser[]>(cognitoEnabled ? null : '/api/dev/users')
+  const users = useApi<SessionUser[]>('/api/dev/users') // deployed without the public demo: 401, and nothing is shown
   const [error, setError] = useState<unknown>(null)
   const [params] = useSearchParams()
   const code = cognitoEnabled ? params.get('code') : null
@@ -47,6 +70,12 @@ export function LoginPage() {
 
   if (user) return <Navigate to={HOME_BY_ROLE[user.role]} replace />
 
+  const active = users.data ?? []
+  const choose = (u: SessionUser) => {
+    setError(null)
+    signIn(u.email).then((signedIn) => navigate(HOME_BY_ROLE[signedIn.role]), setError)
+  }
+
   if (cognitoEnabled) {
     return (
       <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2, background: `linear-gradient(160deg, ${tokens.canvas} 0%, #e3ebf7 100%)` }}>
@@ -62,18 +91,19 @@ export function LoginPage() {
             </Button>
           )}
           <ErrorAlert error={error} />
+          {active.length > 0 && !code && (
+            <Box sx={{ mt: 3 }}>
+              <Typography sx={{ fontWeight: 600 }}>Or explore the demo</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>No password needed. Pick a fictional account to see the portal as that role.</Typography>
+              <DemoAccounts accounts={active} onChoose={choose} />
+            </Box>
+          )}
           <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 3 }}>
             All names, properties, and tax rates are fictional. Not affiliated with any municipality.
           </Typography>
         </Paper>
       </Box>
     )
-  }
-
-  const active = users.data ?? []
-  const choose = (u: SessionUser) => {
-    setError(null)
-    signIn(u.email).then((signedIn) => navigate(HOME_BY_ROLE[signedIn.role]), setError)
   }
 
   return (
@@ -95,24 +125,7 @@ export function LoginPage() {
                 No users yet. Load demo data with <code>scripts/seed-demo-data.sh</code> (see README).
               </Alert>
             ) : (
-              ROLES.map((role) => {
-                const ofRole = active.filter((u) => u.role === role)
-                if (ofRole.length === 0) return null
-                return (
-                  <Box key={role} sx={{ mt: 1.5 }}>
-                    <Divider textAlign="left"><Chip label={ROLE_LABEL[role]} size="small" /></Divider>
-                    <List dense>
-                      {ofRole.slice(0, 4).map((u) => (
-                        <ListItemButton key={u.id} sx={{ borderRadius: 2 }} onClick={() => choose(u)}>
-                          <ListItemAvatar><Avatar sx={{ bgcolor: tokens.navy, width: 34, height: 34, fontSize: '0.8rem' }}>{initials(u.fullName)}</Avatar></ListItemAvatar>
-                          <ListItemText primary={u.fullName} secondary={u.email} slotProps={{ secondary: { sx: { fontFamily: tokens.mono, fontSize: '0.75rem' } } }} />
-                          <StatusChip value={u.role} />
-                        </ListItemButton>
-                      ))}
-                    </List>
-                  </Box>
-                )
-              })
+              <DemoAccounts accounts={active} onChoose={choose} />
             )}
           </QueryState>
           <ErrorAlert error={error} />

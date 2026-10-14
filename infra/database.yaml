@@ -28,6 +28,12 @@ Parameters:
     MinValue: 1
     MaxValue: 16
     Description: Upper limit in Aurora Capacity Units (1 ACU is about 2 GiB of memory). Caps the hourly cost.
+  BackupRetentionDays:
+    Type: Number
+    Default: 7
+    MinValue: 1
+    MaxValue: 35
+    Description: Days of automatic backups. AWS free-plan accounts reject anything above 1.
   DeletionProtection:
     Type: String
     Default: 'false'
@@ -63,7 +69,7 @@ Resources:
         - !ImportValue { 'Fn::Sub': '${ProjectName}-DatabaseSecurityGroupId' }
       StorageEncrypted: true
       KmsKeyId: !ImportValue { 'Fn::Sub': '${ProjectName}-DataKeyArn' } # customer-managed key (security.yaml); also covers backups and snapshots
-      BackupRetentionPeriod: 7
+      BackupRetentionPeriod: !Ref BackupRetentionDays
       CopyTagsToSnapshot: true
       DeletionProtection: !Ref DeletionProtection
       EnableCloudwatchLogsExports: [postgresql]

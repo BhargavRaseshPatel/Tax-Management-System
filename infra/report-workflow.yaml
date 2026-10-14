@@ -85,10 +85,10 @@ Resources:
                 ':processing': { S: PROCESSING }
                 ':message': { 'S.$': $.error.Cause }
                 ':now': { 'S.$': $$.State.EnteredTime }
-            ResultPath: null
+            ResultPath: $.markFailed # CloudFormation rejects null; the next state (Fail) ignores its input anyway
             Catch:
               - ErrorEquals: [States.ALL]
-                ResultPath: null
+                ResultPath: $.markFailed # CloudFormation rejects null; the next state (Fail) ignores its input anyway
                 Next: Failed
             Next: Failed
           Failed:

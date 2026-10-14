@@ -60,8 +60,13 @@ Resources:
             Principal: '*'
             Action: s3:PutObject
             Resource: !Sub '${DocumentsBucket.Arn}/*'
+            # Both must hold: the upload names an encryption AND it is not KMS. An upload that names none (what the
+            # application sends) is allowed and gets the bucket's KMS default. A "not equals" test alone also matches
+            # a missing header, which denied every upload.
             Condition:
-              StringNotEqualsIfExists:
+              'Null':
+                's3:x-amz-server-side-encryption': 'false'
+              StringNotEquals:
                 's3:x-amz-server-side-encryption': aws:kms
           - Sid: DenyInsecureTransport
             Effect: Deny

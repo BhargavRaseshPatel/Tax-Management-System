@@ -14,6 +14,14 @@ Parameters:
   BootstrapAdminEmail:
     Type: String
     Description: Becomes the first ADMIN when the users table is empty. Create the same email in Cognito to sign in.
+  PublicDemo:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >-
+      true shows password-less "demo account" buttons next to the Cognito sign-in. ANYONE who can open the site can
+      then act as the fictional demo administrator, tax officers and residents. Fictional data only; keep
+      ApiDesiredCount at 1.
   Cpu:
     Type: String
     Default: '512' # 0.5 vCPU
@@ -146,7 +154,10 @@ Resources:
             - { Name: BOOTSTRAP_ADMIN_EMAIL, Value: !Ref BootstrapAdminEmail }
             - { Name: SPRINGDOC_API_DOCS_ENABLED, Value: 'false' } # no API description or Swagger UI in AWS
             - { Name: SPRINGDOC_SWAGGER_UI_ENABLED, Value: 'false' }
-            # Deliberately absent: DEV_AUTH and every *_ENDPOINT emulator setting.
+            # Both false unless this is a deliberate public demo; the backend refuses DEV_AUTH on ECS without PUBLIC_DEMO.
+            - { Name: DEV_AUTH, Value: !Ref PublicDemo }
+            - { Name: PUBLIC_DEMO, Value: !Ref PublicDemo }
+            # Deliberately absent: every *_ENDPOINT emulator setting.
           Secrets: # injected by ECS from Secrets Manager at start; never in the template, image or logs
             - Name: DB_USERNAME
               ValueFrom: !Sub

@@ -1,8 +1,8 @@
 # Security
 
 How the system is protected, what was checked, and what is knowingly left open. Day-to-day rules for contributors
-are in [security-rules.md](security-rules.md). **Status: reviewed with automated scanners and local tests; the AWS
-parts have never been deployed, so they are unproven in a real account.**
+are in [security-rules.md](security-rules.md). **Status: reviewed with automated scanners and local tests, and
+deployed once to a free-plan AWS account (us-east-2, RDS PostgreSQL in place of Aurora); no penetration test.**
 
 ## Controls by layer
 
@@ -19,7 +19,7 @@ parts have never been deployed, so they are unproven in a real account.**
 | IAM | Separate execution, API and worker roles. Each statement names the exact actions and resources used. The API cannot take report tasks; the worker cannot start them; the state machine can only update one table | `infra/app.yaml`, `storage.yaml`, `report-jobs.yaml`, `report-workflow.yaml` |
 | Browser | Content-Security-Policy, no framing, no sniffing, strict referrer. Token in `sessionStorage`, cleared on any 401 | `infra/edge.yaml`, `frontend/nginx.conf` |
 | Runtime | Non-root containers; immutable, scanned image tags; health checks with automatic rollback; API docs and Swagger disabled in AWS; only `health` and `info` actuator endpoints | Dockerfiles, `infra/registry.yaml`, `infra/app.yaml` |
-| Guard rails | The app refuses to start with no token issuer, and refuses the local dev sign-in if it finds itself on ECS | `SecurityConfig`, `DevTokenIssuer` |
+| Guard rails | The app refuses to start with no token issuer. On ECS it refuses the password-less dev sign-in unless the deployment is explicitly a public demo (`PublicDemo=true`), and then it signs in the fictional seed accounts only, never a real Cognito account | `SecurityConfig`, `DevTokenIssuer`, `infra/app.yaml` |
 
 ## What was verified, and how to repeat it
 
@@ -47,4 +47,5 @@ Every scanner exception is recorded next to the resource in its template (`Metad
 | 60-minute sessions without refresh; token readable by page scripts | Simplicity; CSP limits script injection | Refresh tokens, or a backend-for-frontend with HttpOnly cookies |
 | No Container Insights, RDS enhanced monitoring, VPC flow logs or GuardDuty | Demo cost | Enable per account policy |
 | Step Functions Local and the other emulators accept any credentials | Local development only | Not applicable to AWS |
-| **Nothing has been deployed** | No AWS account | Deploy, then run a real penetration test and review IAM Access Analyzer findings |
+| Public demo mode (`PublicDemo=true`): anyone who opens the site can act as the fictional demo administrator, tax officers and residents without a password, change the demo data, and (as demo administrator) deactivate or change real accounts | Chosen so visitors can try every role | Deploy with `PublicDemo=false`; real accounts then sign in through Cognito only |
+| No penetration test | Demo | Run one, and review IAM Access Analyzer findings |
