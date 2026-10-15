@@ -105,6 +105,11 @@ Run one class: `./mvnw test -Dtest=TransactionIntegrationTest`.
 **Troubleshooting:** if tests fail with `…class cannot be opened because it does not exist`, an IDE (e.g. VS Code's
 Java extension) recompiled into `target/` during the run. Wait for the IDE build to finish and rerun.
 
+## Continuous integration
+Every push and pull request runs the tests, lint, infrastructure and secret scans, and image builds in GitHub
+Actions ([ci.yml](.github/workflows/ci.yml)). Deployment from `main` is opt-in and needs approval; see
+[deployment.md](docs/deployment.md), Stage 17.
+
 ## Deploying to AWS
 Step-by-step in [docs/deployment.md](docs/deployment.md); design in [docs/aws-architecture.md](docs/aws-architecture.md);
 security controls and known gaps in [docs/security.md](docs/security.md).

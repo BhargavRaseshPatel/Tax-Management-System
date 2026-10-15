@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CivicTax demo - lets the GitHub Actions deploy job of ONE repository, running in its protected "production"
+  environment, ship a new backend image and frontend build. GitHub gets short-lived credentials through OIDC, so no
+  AWS keys are stored in GitHub. The role can roll out images only: infrastructure changes are still deployed by a
+  person. Deploy after app.yaml and edge.yaml.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: civictax
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  GitHubRepository:
+    Type: String
+    AllowedPattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+    Description: owner/name of the GitHub repository whose workflow may deploy, e.g. BhargavRaseshPatel/civictax
+  GitHubEnvironment:
+    Type: String
+    Default: production
+    Description: Only jobs running in this (protected) GitHub environment can assume the role.
+  CreateOidcProvider:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: false if the account already has the GitHub OIDC provider (an account can hold only one).
+
+Conditions:
+  CreateProvider: !Equals [!Ref CreateOidcProvider, 'true']
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "ecr:GetAuthorizationToken and the task-definition calls have no resource-level permissions in AWS; every other statement names its resource"
+    Properties:
+      Description: CivicTax - GitHub Actions production deploys (new images only)
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': sts.amazonaws.com
+                # Not "any workflow in the repository": only a job inside the protected environment.
+                'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubRepository}:environment:${GitHubEnvironment}'
+      Policies:
+        - PolicyName: ship-new-images
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: RegistryLogin
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Sid: PushBackendImage
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                  - ecr:BatchGetImage
+                  - ecr:DescribeImages
+                Resource: !ImportValue { 'Fn::Sub': '${ProjectName}-BackendRepositoryArn' }
+              - Sid: ReadStackSettings
+                Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource:
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-app/*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-edge/*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-auth/*'
+              - Sid: UpdateTheAppStackOnly
+                Effect: Allow
+                Action:
+                  - cloudformation:UpdateStack
+                  - cloudformation:DescribeStackEvents
+                Resource: !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-app/*'
+              # What CloudFormation does with these credentials while it swaps the image in the task definitions.
+              - Sid: NewTaskDefinitionRevisions
+                Effect: Allow
+                Action:
+                  - ecs:RegisterTaskDefinition
+                  - ecs:DeregisterTaskDefinition
+                  - ecs:DescribeTaskDefinition
+                Resource: '*'
+              - Sid: TagOnlyNewTaskDefinitions
+                Effect: Allow
+                Action: ecs:TagResource
+                Resource: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/${ProjectName}-*'
+                Condition:
+                  StringEquals: { 'ecs:CreateAction': RegisterTaskDefinition }
+              - Sid: RollOutServices
+                Effect: Allow
+                Action:
+                  - ecs:UpdateService
+                  - ecs:DescribeServices
+                Resource: !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ProjectName}/*'
+              - Sid: HandTheExistingTaskRolesToEcs
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-app-*'
+                Condition:
+                  StringEquals: { 'iam:PassedToService': ecs-tasks.amazonaws.com }
+              - Sid: PublishFrontendList
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub 'arn:aws:s3:::${ProjectName}-frontend-${AWS::AccountId}-${AWS::Region}'
+              - Sid: PublishFrontendFiles
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub 'arn:aws:s3:::${ProjectName}-frontend-${AWS::AccountId}-${AWS::Region}/*'
+              - Sid: RefreshCdn
+                Effect: Allow
+                Action: cloudfront:CreateInvalidation
+                Resource: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/*' # ponytail: account-wide; export the distribution id from edge.yaml to narrow it
+
+Outputs:
+  DeployRoleArn:
+    Description: Set as the GitHub repository variable AWS_DEPLOY_ROLE_ARN (not a secret)
+    Value: !GetAtt DeployRole.Arn

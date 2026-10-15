@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+
 import com.propertytax.user.User;
 import org.junit.jupiter.api.Test;
 
@@ -44,11 +47,15 @@ class DevTokenIssuerTest {
 	void onlyItsOwnTokensGoToTheDevDecoder() {
 		var issuer = new DevTokenIssuer(false);
 		var own = issuer.issue(new User("s.chen@civictax.demo", "Sarah Chen", User.Role.ADMIN)).accessToken();
-		// header {"alg":"none"}, payload {"iss":"https://cognito-idp.example/pool"}: someone else's issuer
-		var foreign = "eyJhbGciOiJub25lIn0.eyJpc3MiOiJodHRwczovL2NvZ25pdG8taWRwLmV4YW1wbGUvcG9vbCJ9.";
+		// An unsigned token from someone else's issuer, built here so no token-shaped string sits in the source
+		var foreign = base64Url("{\"alg\":\"none\"}") + "." + base64Url("{\"iss\":\"https://cognito-idp.example/pool\"}") + ".";
 		assertThat(DevTokenIssuer.isDevToken(own)).isTrue();
 		assertThat(DevTokenIssuer.isDevToken(foreign)).isFalse();
 		assertThat(DevTokenIssuer.isDevToken("not-a-token")).isFalse();
+	}
+
+	private static String base64Url(String json) {
+		return Base64.getUrlEncoder().withoutPadding().encodeToString(json.getBytes(StandardCharsets.UTF_8));
 	}
 
 }

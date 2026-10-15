@@ -38,11 +38,12 @@ final = annual − interim; overpayments rejected (decided in Stage 5).
 | 7 React frontend | Done |
 | 8 Auth & RBAC | Done. Local dev JWT issuer stands in for Cognito (no AWS account yet) |
 | 9 Docker & local env | Done |
-| 10 Aurora PostgreSQL | Templates done and validated offline. **Not deployed** (no AWS account yet). Isolated database subnets and verified TLS are on the `networking` branch |
-| 11 S3 documents | Done locally against an S3 emulator. Bucket template validated offline, not deployed |
-| 12 DynamoDB report_jobs | Table + store done against DynamoDB Local. Template not deployed |
-| 13 Async reports | Done end to end against local emulators (Step Functions, worker, S3, DynamoDB). Template not deployed |
-| 14 ECR, ECS, Fargate | Templates (registry, Cognito, app) validated offline. **Not deployed** |
-| 15 ALB, CloudFront, HTTPS | Template validated offline; frontend Cognito sign-in built and partly checked locally. **Not deployed** |
-| 16 AWS security | KMS key, tighter IAM, guards; Checkov and Gitleaks scans clean — awaiting approval. See [security.md](security.md). **Not deployed** |
-| 17–19 | Not started |
+| 10 Aurora PostgreSQL | Aurora template done and validated offline, but a free-plan AWS account refuses Aurora, so the deployment runs `database-rds.yaml` (RDS PostgreSQL 17) instead. Isolated database subnets and verified TLS are on the `networking` branch |
+| 11 S3 documents | Done and deployed (us-east-2) |
+| 12 DynamoDB report_jobs | Done and deployed (us-east-2) |
+| 13 Async reports | Done and deployed (us-east-2) |
+| 14 ECR, ECS, Fargate | Done and deployed (us-east-2) |
+| 15 ALB, CloudFront, HTTPS | Done and deployed (us-east-2) |
+| 16 AWS security | Done and deployed. KMS key, tighter IAM, guards; Checkov and Gitleaks clean. See [security.md](security.md) |
+| 17 CI/CD | GitHub Actions workflow: tests, lint, scans, image builds; deploy job via OIDC behind a protected environment. Checks verified locally; not yet run on GitHub |
+| 18–19 | Not started |

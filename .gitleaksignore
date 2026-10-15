@@ -1,0 +1,4 @@
+# Findings reviewed and accepted (gitleaks fingerprint: commit:file:rule:line).
+# An unsigned test token with a made-up issuer ({"alg":"none"}, {"iss":"https://cognito-idp.example/pool"}): not a
+# credential. The test now builds it at run time, so only this old commit contains the literal.
+c52031acdcd5b2682b9e18d3c24411f602ba30ef:backend/src/test/java/com/propertytax/security/DevTokenIssuerTest.java:jwt:48

@@ -1,5 +1,7 @@
 # Build stage: compile the jar. Tests run in CI (they need Docker for Testcontainers), not during the image build.
-FROM eclipse-temurin:21-jdk AS build
+# Runs on the builder's own CPU: Java bytecode is the same everywhere, so an ARM64 image built on an x86 CI runner
+# only emulates the short runtime stage below.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:21-jdk AS build
 WORKDIR /src
 COPY .mvn .mvn
 COPY mvnw pom.xml ./

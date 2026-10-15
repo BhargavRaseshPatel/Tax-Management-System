@@ -342,3 +342,46 @@ Cost: one KMS key is about US$1 a month plus fractions of a cent per thousand us
 Clean up: the key is kept when the stack is deleted (deleting it would make every backup and document
 unreadable). When everything else is gone: `aws kms schedule-key-deletion --key-id alias/civictax-data
 --pending-window-in-days 7`.
+
+---
+
+## Stage 17 — CI/CD (GitHub Actions)
+
+One workflow, [.github/workflows/ci.yml](../.github/workflows/ci.yml), on every push and pull request:
+
+| Job | What it runs | Fails when |
+|---|---|---|
+| Backend | `./mvnw -B verify`: all unit and integration tests (Testcontainers runs PostgreSQL and the AWS emulators) | any test fails |
+| Frontend | `npm ci`, `npm run lint`, `npm test`, `npm run build` | lint error, test failure, type error |
+| Security | `cfn-lint` and Checkov on `infra/`, Gitleaks on the whole git history | any template error, any scanner finding without a documented exception, any secret in a commit |
+| Images | `docker build` of the backend and frontend images | either Dockerfile breaks |
+| Deploy | on `main` only, after all four pass: pushes an ARM64 image tagged with the commit, updates `civictax-app` to that tag, publishes the frontend to S3 and refreshes CloudFront | the rollout fails (ECS rolls back automatically) |
+
+How the deployment is protected:
+- **No AWS keys in GitHub.** The deploy job gets short-lived credentials through OpenID Connect. AWS trusts only
+  jobs of one named repository running in its `production` environment.
+- **A person approves every deployment.** The `production` environment requires a reviewer.
+- **The pipeline can only ship new images.** Its role can push to the one image repository, change the image tag of
+  the `civictax-app` stack (same template, other settings unchanged), and publish the frontend. It cannot change the
+  network, database, IAM, or any other stack: infrastructure changes are still deployed by a person.
+- **Actions are pinned to exact commits**, and the workflow's default token is read-only.
+
+Until the role exists, the deploy job is skipped and everything else still runs.
+
+### Switch on deployments
+1. GitHub → the repository → **Settings → Environments → New environment** `production`: tick **Required
+   reviewers** (add yourself), and under **Deployment branches** allow `main` only.
+2. Create the role (once per AWS account):
+   ```bash
+   aws cloudformation deploy --region us-east-2 --stack-name civictax-github-deploy --template-file infra/github-deploy.yaml --capabilities CAPABILITY_IAM --parameter-overrides GitHubRepository=BhargavRaseshPatel/Tax-Management-System
+   ```
+   If the account already has GitHub's OIDC provider, add `CreateOidcProvider=false`.
+3. Copy its `DeployRoleArn` output to **Settings → Secrets and variables → Actions → Variables** as
+   `AWS_DEPLOY_ROLE_ARN`. It is an identifier, not a secret: only the trust rule above lets anyone use it.
+4. Push to `main`. After the checks pass, the run waits for your approval, then deploys.
+
+Optional: **Settings → Branches → add a rule for `main`** requiring the four check jobs to pass before merging.
+
+Cost: GitHub Actions minutes are free for public repositories; a run uses about 10 minutes.
+
+Clean up: `aws cloudformation delete-stack --region us-east-2 --stack-name civictax-github-deploy`.
